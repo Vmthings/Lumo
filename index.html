@@ -95,7 +95,7 @@ ${DIR?`<div class="r"><input class="f" id="sq" placeholder="Search schools by na
 <div class="r"><input class="f" id="sc" placeholder="School code" maxlength="6" aria-label="School code" style="text-transform:uppercase"><button class="pri" onclick="schoolFind($('#sc').value)">Find school</button></div><div class="err" id="sge" style="color:var(--bad)"></div></details>
 <details class="c"><summary><b>Principals: create a school</b></summary><p class="mu">You manage teacher accounts and lessons. Lessons are stored and hosted on this computer, so keep Lumo open while teachers are working.</p>
 <div class="r"><input class="f" id="psn" placeholder="School name" aria-label="School name"><input class="f" id="psc" placeholder="City (optional)" aria-label="City"></div><div class="r"><input class="f" id="pu" placeholder="Your username" aria-label="Principal username"><input class="f" id="pp" type="password" placeholder="Password (6+ characters)" aria-label="Password"></div>
-<button class="pri" onclick="pauth()">Create school</button><div class="err" id="pe" style="color:var(--bad)"></div></details>`}
+<button class="pri" onclick="pauth()">Create school</button><div class="err" id="pe" style="color:var(--bad)"></div></details>`;const jp=new URLSearchParams(location.search).get('join');if(jp&&$('#jc'))$('#jc').value=jp.toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,5)}
 async function auth(reg){const u=$('#au').value.trim(),p=$('#ap').value,us=ls('lc_users',{}),e=$('#ae');
 if(!u||p.length<6)return e.textContent='Enter a username and a 6+ character password.';
 if(reg){if(us[u])return e.textContent='Username taken.';const s=crypto.randomUUID();us[u]={s,h:await hash(p,s)};sv('lc_users',us)}
@@ -200,18 +200,18 @@ let mlist=[];
 const saveCfg=()=>sv('lc_set_'+user,cfg),today=()=>new Date().toISOString().slice(0,10);
 const useToday=()=>{const u=ls('lc_use',{});return u.d===today()?u.n:0};
 const norm=(h,p)=>{const o=[];for(const m of [...(h||[]),{role:'user',content:p}]){const r=m.role==='user'?'user':'assistant',l=o[o.length-1];if(l&&l.role===r)l.content+='\n\n'+m.content;else if(l||r==='user')o.push({role:r,content:m.content})}return o};
-async function llm(sys,p,web,h){const P=cfg.prov||'builtin';let url,hd={'Content-Type':'application/json'},b,r,j;
+async function llm(sys,p,web,h,c=cfg){if(c===cfg&&scope?.t==='remote'&&sch?.ai){const rr=await call({t:'llm',sys,p,web,h});if(rr.err)throw Error(rr.err);return rr.text}const P=c.prov||'builtin';let url,hd={'Content-Type':'application/json'},b,r,j;
  if(P==='builtin'){const n=useToday();if(n>=LIMIT)throw Error(`Built-in AI is limited to ${LIMIT} requests a day. Add your own API key in Settings > Advanced.`);sv('lc_use',{d:today(),n:n+1});
   b={model:MODEL,messages:[{role:'system',content:sys},...(h||[]),{role:'user',content:p}]};if(web)b.tools=[{type:'browser_search'}];
   r=await fetch(PROXY,{method:'POST',headers:hd,body:JSON.stringify(b)});j=await r.json();return j.choices?.[0]?.message?.content||j.reply||j.text||j.content||''}
- const k=(cfg.keys||{})[P],md=(cfg.models||{})[P]||PROV[P].models[0];if(!k)throw Error(`Add your ${PROV[P].n} API key in Settings > Advanced`);
+ const k=(c.keys||{})[P],md=(c.models||{})[P]||PROV[P].models[0];if(!k)throw Error(`Add your ${PROV[P].n} API key in Settings > Advanced`);
  if(P==='claude'){hd['x-api-key']=k;hd['anthropic-version']='2023-06-01';hd['anthropic-dangerous-direct-browser-access']='true';url=PROV.claude.url;b={model:md,max_tokens:4096,system:sys,messages:norm(h,p)};if(web)b.tools=[{type:'web_search_20250305',name:'web_search',max_uses:3}]}
  else if(P==='gemini'){url=`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(md)}:generateContent`;hd['x-goog-api-key']=k;b={systemInstruction:{parts:[{text:sys}]},contents:norm(h,p).map(m=>({role:m.role==='user'?'user':'model',parts:[{text:m.content}]}))};if(web)b.tools=[{google_search:{}}]}
  else{url=PROV[P].url;hd.Authorization='Bearer '+k;b={model:md,messages:[{role:'system',content:sys},...(h||[]),{role:'user',content:p}]};if(web&&P==='groq'&&/gpt-oss/.test(md))b.tools=[{type:'browser_search'}]}
  r=await fetch(url,{method:'POST',headers:hd,body:JSON.stringify(b)});j=await r.json().catch(()=>({}));
  if(!r.ok)throw Error(j.error?.message||(typeof j.error==='string'?j.error:'HTTP '+r.status));
  return P==='claude'?(j.content||[]).filter(c=>c.type==='text').map(c=>c.text).join(''):P==='gemini'?(j.candidates?.[0]?.content?.parts||[]).map(c=>c.text||'').join(''):j.choices?.[0]?.message?.content||''}
-function advHTML(){const P=cfg.prov||'builtin',d=PROV[P],ml=mlist.length?mlist:d.models;
+function advHTML(){if(scope?.t==='remote'&&sch?.ai)return'<p class="mu">Your principal has set up the school AI, so your AI requests use it. You do not need an API key.</p>';const P=cfg.prov||'builtin',d=PROV[P],ml=mlist.length?mlist:d.models;
  return`<label class="fld">Provider<select onchange="cfg.prov=this.value;mlist=[];saveCfg();advView()">${Object.entries(PROV).map(([k,v])=>`<option value="${k}" ${k===P?'selected':''}>${v.n}</option>`).join('')}</select></label>
 ${P==='builtin'?`<p class="mu">Uses the shared HRS proxy with a fixed model. Limited to ${LIMIT} requests a day in this browser (used today: ${useToday()}). Each chat message can use several requests.</p>`
 :`<label class="fld">API key<input type="password" autocomplete="off" placeholder="Paste your ${d.n} API key" value="${esc((cfg.keys||{})[P]||'')}" oninput="(cfg.keys=cfg.keys||{})['${P}']=this.value.trim();saveCfg()"></label>
@@ -270,36 +270,41 @@ function mv(j,d){const k=j+d;if(k<0||k>=L.items.length)return;[L.items[j],L.item
 let sess=null,rs=null,rc=null,rpeer=null,sch=null,scope=null,rid=0,rpend={};
 function seq(l){const it=l.items;if(l.split===false)return it;const sl=it.filter(x=>x.type!=='q'),qs=it.filter(x=>x.type==='q');return sl.length&&qs.length?[...sl,{type:'slide',title:'Quiz time',body:'The lesson is finished. Get ready for the questions.'},...qs]:it}
 class Sess{
- constructor(l,on){this.l=JSON.parse(JSON.stringify(l));this.items=seq(this.l);this.code=Math.random().toString(36).slice(2,7).toUpperCase();this.idx=0;this.reveal=false;this.lb=!!l.lb;this.pl={};this.cn={};this.sugs=[];this.on=on||(()=>{});this.onerr=e=>alert('Connection error: '+e);
-  this.peer=new Peer('hrslesson-'+this.code);
-  this.peer.on('connection',c=>{this.cn[c.peer]=c;c.on('data',m=>{const p=this.pl[c.peer];
+ constructor(l,on){this.l=JSON.parse(JSON.stringify(l));this.items=seq(this.l);this.idx=0;this.reveal=false;this.lb=!!l.lb;this.pl={};this.cn={};this.sugs=[];this.on=on||(()=>{});this.ok=false;this.err='';this.open();
+  this.iv=setInterval(()=>{const p=this.peer;if(p&&p.disconnected&&!p.destroyed)try{p.reconnect()}catch{}},15000)}
+ open(){this.code=mkcode();const p=this.peer=new Peer('hrslesson-'+this.code);
+  p.on('open',()=>{this.ok=true;this.err='';this.on()});
+  p.on('connection',c=>{this.cn[c.peer]=c;c.on('data',m=>{const q=this.pl[c.peer];
    if(m.t==='join'){this.pl[c.peer]={name:String(m.name).slice(0,20),score:0,ans:null};this.push(c.peer);this.on()}
-   else if(m.t==='ans'&&p&&!this.reveal&&p.ans===null){p.ans=m.a;this.push(c.peer);this.on()}
-   else if(m.t==='sug'){this.sugs.push({n:p?.name||'?',x:String(m.x).slice(0,300)});this.on()}});
+   else if(m.t==='ans'&&q&&!this.reveal&&q.ans===null){q.ans=m.a;this.push(c.peer);this.on()}
+   else if(m.t==='sug'){this.sugs.push({n:q?.name||'?',x:String(m.x).slice(0,300)});this.on()}});
    c.on('close',()=>{delete this.cn[c.peer];delete this.pl[c.peer];this.on()})});
-  this.peer.on('error',e=>this.onerr(e.type))}
+  p.on('disconnected',()=>{if(!p.destroyed)try{p.reconnect()}catch{}});
+  p.on('error',e=>{if(e.type==='unavailable-id'){try{p.destroy()}catch{}this.open();return}this.err=e.type;this.on()})}
  board(){return Object.values(this.pl).sort((a,b)=>b.score-a.score).map(p=>({n:p.name,s:p.score}))}
  push(id){const c=this.cn[id],p=this.pl[id],x=this.items[this.idx];if(!c||!p)return;c.send({t:'st',title:this.l.title,idx:this.idx,total:this.items.length,item:x&&(x.type==='q'?{type:'q',q:x.q,opts:x.opts}:x),reveal:this.reveal,ans:this.reveal?x?.ans:null,mine:p.ans,score:p.score,lb:this.lb?this.board().slice(0,5):null})}
  pushAll(){Object.keys(this.cn).forEach(id=>this.push(id))}
  go(d){this.idx=Math.max(0,Math.min(this.items.length-1,this.idx+d));this.reveal=false;Object.values(this.pl).forEach(p=>p.ans=null);this.pushAll();this.on()}
  rev(){const x=this.items[this.idx];if(x?.type!=='q'||this.reveal)return;this.reveal=true;Object.values(this.pl).forEach(p=>{if(p.ans===x.ans)p.score+=100});this.pushAll();this.on()}
  tgl(v){this.lb=!!v;this.pushAll();this.on()}
- state(){const pl=Object.values(this.pl);return{code:this.code,title:this.l.title,idx:this.idx,total:this.items.length,item:this.items[this.idx]||null,reveal:this.reveal,lb:this.lb,n:pl.length,answered:pl.filter(p=>p.ans!==null).length,board:this.board(),sugs:this.sugs}}
- end(){try{this.peer.destroy()}catch{}}}
+ state(){const pl=Object.values(this.pl);return{ok:this.ok,err:this.err,code:this.code,title:this.l.title,idx:this.idx,total:this.items.length,item:this.items[this.idx]||null,reveal:this.reveal,lb:this.lb,n:pl.length,answered:pl.filter(p=>p.ans!==null).length,board:this.board(),sugs:this.sugs}}
+ end(){clearInterval(this.iv);try{this.peer.destroy()}catch{}}}
 const act=(a,v)=>scope?.t==='remote'?(rc&&rs&&rc.send({t:'cmd',a,v})):sess?.[a](v);
 const go=d=>act('go',d),rev=()=>act('rev'),tglLb=v=>act('tgl',v);
 function stopHost(){if(sess){sess.end();sess=null}if(hosting&&scope?.t==='remote'&&rc)rc.send({t:'end'});rs=null;hosting=false;present(false)}
+function copyLink(c){const u=location.origin+location.pathname+'?join='+c;if(navigator.clipboard)navigator.clipboard.writeText(u).then(()=>hint('Join link copied'),()=>prompt('Copy this link',u));else prompt('Copy this link',u)}
 function endHost(){stopHost();scope?.t==='mgr'?schoolView():dash()}
 function host(i){stopHost();
  if(scope?.t==='remote'){hosting=true;app.innerHTML='<div class="c">Starting the lesson on the school computer…</div>';rc.send({t:'host',i});return}
  sess=new Sess(lessons[i],()=>hview(sess.state()));hosting=true;hview(sess.state())}
 function hview(S){document.body.dataset.m='stage';const x=S.item;
-app.innerHTML=`<div class="bar"><button class="g" onclick="endHost()">End lesson</button><button class="g" onclick="toggleFull()">Fullscreen</button><div class="join">Students join with code<b class="code">${S.code}</b></div><span class="mu">${S.n} connected</span><label class="t"><input type="checkbox" ${S.lb?'checked':''} onchange="tglLb(this.checked)">Leaderboard</label></div>
-<div class="prog"><i style="width:${(S.idx+1)/Math.max(1,S.total)*100}%"></i></div>
+app.innerHTML=`<div class="bar"><button class="g" onclick="endHost()">End lesson</button><button class="g" onclick="toggleFull()">Fullscreen</button><button class="g" onclick="copyLink('${S.code}')">Copy join link</button><div class="join">Students join with code<b class="code">${S.ok?S.code:'…'}</b></div><span class="mu">${S.n} connected</span><label class="t"><input type="checkbox" ${S.lb?'checked':''} onchange="tglLb(this.checked)">Leaderboard</label></div>
+${S.err?`<div class="c" style="color:var(--bad)">Students cannot connect right now (${esc(S.err)}). Check this computer's internet connection, then end the lesson and host again.</div>`:S.ok?'':'<div class="c mu">Setting up the lesson code…</div>'}<div class="prog"><i style="width:${(S.idx+1)/Math.max(1,S.total)*100}%"></i></div>
 <div class="grid"><section><div class="board big">${x?(x.type==='q'?`<h2>${esc(x.q)}</h2>${x.opts.map((o,k)=>`<div class="opt ${S.reveal&&k===x.ans?'ok':''}"><b class="ab">${'ABCD'[k]}</b>${esc(o)}</div>`).join('')}<p class="mu">${S.answered} of ${S.n} answered</p>`:`<h2>${esc(x.title)}</h2><p>${esc(x.body)}</p>`):'<p>This lesson has no slides yet. End the lesson and add some in the editor.</p>'}</div>
 <div class="r ctl"><button class="g" onclick="go(-1)">Previous</button><span class="mu">${S.idx+1} of ${S.total}</span><button class="pri" onclick="go(1)">Next</button>${x?.type==='q'?`<button onclick="rev()" ${S.reveal?'disabled':''}>Reveal answer</button>`:''}</div></section>
-<aside><div class="lb"><b>Leaderboard</b>${S.board.map((p,i)=>`<div class="rk"><span>${i+1}. ${esc(p.n)}</span><b>${p.s}</b></div>`).join('')||'<p class="mu">Waiting for students to join.</p>'}</div>${S.sugs.length?`<div class="lb"><b>Student suggestions</b>${S.sugs.map(s=>`<div class="sg"><b>${esc(s.n)}:</b> ${esc(s.x)}</div>`).join('')}</div>`:''}</aside></div><div class="pcode">Code<b>${S.code}</b></div>`}
+<aside><div class="lb"><b>Leaderboard</b>${S.board.map((p,i)=>`<div class="rk"><span>${i+1}. ${esc(p.n)}</span><b>${p.s}</b></div>`).join('')||'<p class="mu">Waiting for students to join.</p>'}</div>${S.sugs.length?`<div class="lb"><b>Student suggestions</b>${S.sugs.map(s=>`<div class="sg"><b>${esc(s.n)}:</b> ${esc(s.x)}</div>`).join('')}</div>`:''}</aside></div><div class="pcode">Code<b>${S.ok?S.code:'…'}</b></div>`}
 /* ---------- school: teacher side ---------- */
+const mkcode=()=>Array.from(crypto.getRandomValues(new Uint8Array(5)),b=>'ABCDEFGHJKMNPQRSTUVWXYZ23456789'[b%31]).join('');
 const BAD='Could not reach the school computer. Check the code, and ask the principal to keep Lumo open.';
 function closeRemote(){const p=rpeer;rpeer=rc=null;rs=null;rpend={};try{p&&p.destroy()}catch{}}
 function connectHub(id){return new Promise((ok,no)=>{closeRemote();const p=rpeer=new Peer(),to=setTimeout(()=>no(Error(BAD)),9000);
@@ -309,7 +314,7 @@ function connectHub(id){return new Promise((ok,no)=>{closeRemote();const p=rpeer
 const call=m=>new Promise(res=>{const i=++rid;rpend[i]=res;rc.send({...m,r:i})});
 function rmsg(m){if(m.r&&rpend[m.r]){rpend[m.r](m);delete rpend[m.r]}else if(m.t==='ss'){rs=m.s;if(hosting)hview(rs)}}
 async function schoolFind(id){id=String(id).trim().toUpperCase();const e=$('#sge');if(!/^[A-Z0-9]{6}$/.test(id)){e.textContent='School codes have 6 letters or numbers.';return}
- e.textContent='Connecting…';try{await connectHub(id);const r=await call({t:'info'});sch={id,name:r.name,city:r.city};schoolJoinView()}catch(x){e.textContent=x.message}}
+ e.textContent='Connecting…';try{await connectHub(id);const r=await call({t:'info'});sch={id,name:r.name,city:r.city,ai:r.ai};schoolJoinView()}catch(x){e.textContent=x.message}}
 async function schoolSearch(){const q=$('#sq').value.trim(),o=$('#sres');o.textContent='Searching…';
  try{const l=await(await fetch(DIR+'/schools?q='+encodeURIComponent(q))).json();
   o.innerHTML=l.filter(x=>/^[A-Z0-9]{6}$/.test(x.id)).map(x=>`<div class="tr"><div class="f"><b>${esc(x.name)}</b><div class="mu">${esc(x.city||'')}</div></div><button class="pri" onclick="schoolFind('${x.id}')">Select</button></div>`).join('')||'<p class="mu">No schools found.</p>'}
@@ -320,36 +325,48 @@ function schoolJoinView(){app.innerHTML=`<div class="c tch"><div class="r"><butt
 async function schoolAsk(m){const e=$('#sge');if(!rc){try{await connectHub(sch.id)}catch(x){e.textContent=x.message;return null}}return call(m)}
 async function schoolReq(){const u=$('#su').value.trim(),p=$('#sp').value,r=await schoolAsk({t:'req',u,p});if(r)$('#sge').textContent=r.msg}
 async function schoolLogin(){const u=$('#su').value.trim(),p=$('#sp').value,r=await schoolAsk({t:'login',u,p});if(!r)return;if(!r.ok){$('#sge').textContent=r.msg;return}
- user=u;scope={t:'remote'};lessons=r.lessons;if(r.s){rs=r.s;hosting=true;hdr();hview(rs)}else dash()}
+ user=u;sch.ai=r.ai;scope={t:'remote'};lessons=r.lessons;if(r.s){rs=r.s;hosting=true;hdr();hview(rs)}else dash()}
 /* ---------- school: principal side ---------- */
 const DIR='';/* optional: URL of the school directory Worker, see README */
-let SC=null,role=null,hub=null,hubErr='',hubSess={};const hubCs=new Set(),saveSC=()=>sv('lc_school_'+user,SC);
-const refreshSchool=()=>{if($('#schoolview'))schoolView()};
-function startHub(){if(hub||!SC)return;hub=new Peer('lumo-s-'+SC.id);hub.on('open',refreshSchool);
+let hubIv,SC=null,role=null,hub=null,hubErr='',hubSess={};const hubCs=new Set(),saveSC=()=>sv('lc_school_'+user,SC);
+const refreshSchool=()=>{if($('#schoolview')&&!/INPUT|SELECT/.test(document.activeElement?.tagName))schoolView()};
+function startHub(){if(hub||!SC)return;hub=new Peer('lumo-s-'+SC.id);hub.on('open',refreshSchool);hub.on('disconnected',()=>{if(hub&&!hub.destroyed)try{hub.reconnect()}catch{}});hubIv=setInterval(()=>{if(hub&&hub.disconnected&&!hub.destroyed)try{hub.reconnect()}catch{}},15000);
  hub.on('error',e=>{hubErr=e.type==='unavailable-id'?'This school is already open in another tab or on another computer.':'Server error: '+e.type;refreshSchool()});
  hub.on('connection',c=>{hubCs.add(c);c.on('close',()=>hubCs.delete(c));c.on('data',async m=>{const rep=o=>c.send({r:m.r,...o}),u=c.u,mem=u&&SC.members[u];
-  if(m.t==='info')return rep({name:SC.name,city:SC.city});
+  if(m.t==='info')return rep({name:SC.name,city:SC.city,ai:!!SC.ai?.on});
   if(m.t==='req'){const n=String(m.u||'').trim();if(!/^[A-Za-z0-9_.-]{2,30}$/.test(n)||String(m.p||'').length<6)return rep({msg:'Use a username of 2-30 letters or numbers and a 6+ character password.'});
    if(SC.members[n]||n===user)return rep({msg:'That username is taken.'});const sa=crypto.randomUUID();SC.members[n]={s:sa,h:await hash(m.p,sa),st:'pending'};SC.lessons[n]=[];saveSC();refreshSchool();return rep({msg:'Request sent. You can log in once the principal accepts it.'})}
   if(m.t==='login'){const n=String(m.u||'').trim(),mm=SC.members[n];if(!mm||mm.h!==await hash(String(m.p||''),mm.s))return rep({ok:false,msg:'Wrong username or password.'});
    if(mm.st==='pending')return rep({ok:false,msg:'The principal has not accepted your request yet.'});if(mm.st==='off')return rep({ok:false,msg:'This account is suspended. Ask your principal.'});
-   c.u=n;const ss=hubSess[n];if(ss)ss.on=()=>c.open&&c.send({t:'ss',s:ss.state()});return rep({ok:true,lessons:SC.lessons[n]||[],s:ss&&ss.state()})}
+   c.u=n;const ss=hubSess[n];if(ss)ss.on=()=>c.open&&c.send({t:'ss',s:ss.state()});return rep({ok:true,lessons:SC.lessons[n]||[],s:ss&&ss.state(),ai:!!SC.ai?.on})}
   if(!mem||mem.st!=='ok')return;
   if(m.t==='save'){if(Array.isArray(m.lessons)&&JSON.stringify(m.lessons).length<2e6){SC.lessons[u]=m.lessons;saveSC();refreshSchool()}}
-  else if(m.t==='host'){const l=(SC.lessons[u]||[])[m.i];if(!l)return;hubSess[u]?.end();const ss=new Sess(l,()=>{if(c.open)c.send({t:'ss',s:ss.state()});refreshSchool()});ss.onerr=e=>{if(c.open)c.send({t:'ss',s:ss.state()})};hubSess[u]=ss;c.send({t:'ss',s:ss.state()});refreshSchool()}
+  else if(m.t==='host'){const l=(SC.lessons[u]||[])[m.i];if(!l)return;hubSess[u]?.end();const ss=new Sess(l,()=>{if(c.open)c.send({t:'ss',s:ss.state()});refreshSchool()});hubSess[u]=ss;c.send({t:'ss',s:ss.state()});refreshSchool()}
+  else if(m.t==='llm'){const a=SC.ai;if(!a?.on)return rep({err:'The school AI is turned off.'});const d=today(),us=SC.use=SC.use||{};if(us.d!==d){us.d=d;us.n={}}us.n[u]=(us.n[u]||0)+1;if(us.n[u]>(a.cap||200))return rep({err:'Daily school AI limit reached.'});
+   try{rep({text:await llm(String(m.sys||'').slice(0,30000),String(m.p||'').slice(0,60000),!!m.web,(Array.isArray(m.h)?m.h:[]).slice(-14).map(x=>({role:x.role==='user'?'user':'assistant',content:String(x.content).slice(0,20000)})),a)})}catch(x){rep({err:x.message})}}
   else if(m.t==='cmd'&&['go','rev','tgl'].includes(m.a))hubSess[u]?.[m.a](m.v);
   else if(m.t==='end'){hubSess[u]?.end();delete hubSess[u];refreshSchool()}})})}
-function stopHub(){Object.values(hubSess).forEach(x=>x.end());hubSess={};try{hub&&hub.destroy()}catch{}hub=null;hubErr='';hubCs.clear()}
+function stopHub(){clearInterval(hubIv);Object.values(hubSess).forEach(x=>x.end());hubSess={};try{hub&&hub.destroy()}catch{}hub=null;hubErr='';hubCs.clear()}
 function kick(n){hubSess[n]?.end();delete hubSess[n];hubCs.forEach(c=>{if(c.u===n)c.close()})}
 function schoolView(){scope=null;hdr();loadU();const names=Object.keys(SC.members),pend=names.filter(n=>SC.members[n].st==='pending'),ok=names.filter(n=>SC.members[n].st!=='pending'),live=Object.entries(hubSess);
 app.innerHTML=`<div class="c" id="schoolview"><div class="r"><button class="g" onclick="dash()">← Back</button><h2 class="f">${esc(SC.name)}</h2></div>
 <div class="mu">School code (give this to teachers)</div><div class="code" style="color:var(--board)">${SC.id}</div><div class="mu">${esc(hubErr||(hub&&hub.open?'Server online':'Starting…'))}</div>
 <p class="mu">Teachers connect to this computer. Their lessons are stored here and live lessons run here, so keep Lumo open and this computer online while teaching.</p>
 ${DIR?`<label class="t"><input type="checkbox" ${SC.listed?'checked':''} onchange="listSchool(this.checked)">Show in school search</label>`:'<p class="mu">School search is not set up on this site, so give teachers the school code.</p>'}</div>
-<div class="c"><b>Join requests</b>${pend.map(n=>`<div class="tr"><b class="f">${esc(n)}</b><button class="pri" onclick="memAct(${names.indexOf(n)},'ok')">Accept</button><button class="d" onclick="memAct(${names.indexOf(n)},'deny')">Decline</button></div>`).join('')||'<p class="mu">No requests waiting.</p>'}</div>
+${aiCard()}<div class="c"><b>Join requests</b>${pend.map(n=>`<div class="tr"><b class="f">${esc(n)}</b><button class="pri" onclick="memAct(${names.indexOf(n)},'ok')">Accept</button><button class="d" onclick="memAct(${names.indexOf(n)},'deny')">Decline</button></div>`).join('')||'<p class="mu">No requests waiting.</p>'}</div>
 <div class="c"><b>Teachers</b>${ok.map(n=>{const k=names.indexOf(n),m=SC.members[n];return`<div class="tr"><div class="f"><b>${esc(n)}</b> <span class="badge">${m.st==='off'?'Suspended':'Active'}</span><div class="mu">${(SC.lessons[n]||[]).length} lessons</div></div><button class="g" onclick="memAct(${k},'${m.st==='off'?'on':'off'}')">${m.st==='off'?'Reinstate':'Suspend'}</button><button class="g" onclick="memAct(${k},'pw')">Reset password</button><button class="d" onclick="memAct(${k},'rm')">Remove</button></div>`}).join('')||'<p class="mu">No teachers yet.</p>'}</div>
 <div class="c"><b>All lessons</b>${ok.map(n=>{const k=names.indexOf(n);return(SC.lessons[n]||[]).map((l,j)=>`<div class="tr"><div class="f"><b>${esc(l.title)}</b><div class="mu">${esc(n)}, ${l.items.length} items</div></div><button class="g" onclick="lesAct(${k},${j},'edit')">Edit</button><button class="pri" onclick="lesAct(${k},${j},'host')">Host</button><button class="d" onclick="lesAct(${k},${j},'del')">Delete</button></div>`).join('')}).join('')||'<p class="mu">No lessons yet.</p>'}</div>
 <div class="c"><b>Live now</b>${live.map(([n,x],k)=>`<div class="tr"><div class="f"><b>${esc(x.l.title)}</b><div class="mu">${esc(n)}, code ${x.code}, ${Object.keys(x.pl).length} students</div></div><button class="d" onclick="liveEnd(${k})">End</button></div>`).join('')||'<p class="mu">No live lessons.</p>'}</div>`}
+function aiCard(){const a=SC.ai||{prov:'builtin'},P=a.prov||'builtin',d=PROV[P];
+return`<div class="c"><b>School AI</b><p class="mu">Set one API key for the whole school. Teachers' AI requests are sent to this computer and forwarded to the provider, so teachers never see the key.</p>
+<label class="t"><input type="checkbox" ${a.on?'checked':''} onchange="schAI('on',this.checked)">Let teachers use the school AI</label>
+<label class="fld">Provider<select onchange="schAI('prov',this.value);schoolView()">${Object.entries(PROV).map(([k,v])=>`<option value="${k}" ${k===P?'selected':''}>${v.n}</option>`).join('')}</select></label>
+${P==='builtin'?'<p class="mu">Uses the shared proxy and its daily limit.</p>':`<label class="fld">API key<input type="password" autocomplete="off" placeholder="Paste your ${d.n} API key" value="${esc((a.keys||{})[P]||'')}" oninput="schAI('key',this.value)"></label><label class="fld">Model<input list="smdl" value="${esc((a.models||{})[P]||d.models[0])}" oninput="schAI('model',this.value)"><datalist id="smdl">${d.models.map(m=>`<option value="${esc(m)}">`).join('')}</datalist></label>`}
+<label class="fld">Daily limit per teacher<input type="number" min="1" value="${a.cap||200}" onchange="schAI('cap',+this.value)"></label>
+<button class="g" onclick="schTest()">Test connection</button><p class="mu" id="schmsg">The key is saved in this browser. Teachers need Lumo open here to use it.</p></div>`}
+function schAI(k,v){const a=SC.ai=SC.ai||{on:false,prov:'builtin',keys:{},models:{},cap:200};a.keys=a.keys||{};a.models=a.models||{};
+ if(k==='on')a.on=!!v;else if(k==='prov')a.prov=v;else if(k==='key')a.keys[a.prov]=String(v).trim();else if(k==='model')a.models[a.prov]=String(v).trim();else if(k==='cap')a.cap=Math.max(1,v||200);saveSC()}
+async function schTest(){const m=$('#schmsg');m.textContent='Testing…';try{const t=await llm('Reply with the single word: ok','ping',false,[],SC.ai||{prov:'builtin'});m.textContent='Connected. The model replied: '+t.slice(0,60)}catch(e){m.textContent='Failed: '+e.message}}
 function memAct(k,a){const n=Object.keys(SC.members)[k],m=SC.members[n];if(!m)return;
  if(a==='ok'||a==='on')m.st='ok';
  else if(a==='off'){m.st='off';kick(n)}
@@ -381,13 +398,14 @@ document.addEventListener('keydown',e=>{if(!hosting||e.ctrlKey||e.metaKey||e.alt
  if(k===' '||k==='ArrowRight'||k==='PageDown')go(1);else if(k==='ArrowLeft'||k==='PageUp')go(-1);else if(k==='r'||k==='R')rev();else if(k==='f'||k==='F')toggleFull();else if(k==='Escape'&&document.body.classList.contains('present'))present(false);else return;
  e.preventDefault();if(document.activeElement?.tagName==='BUTTON')document.activeElement.blur()});
 /* ---------- student ---------- */
-function join(){const code=$('#jc').value.trim().toUpperCase(),name=$('#jn').value.trim(),e=$('#je');
-if(!code||!name)return e.textContent='Enter the code and your name.';e.textContent='Connecting…';
+function join(){const code=$('#jc').value.toUpperCase().replace(/[^A-Z0-9]/g,''),name=$('#jn').value.trim(),e=$('#je');
+if(!code||!name){e.textContent='Enter the code and your name.';return}e.textContent='Connecting…';
+const fail=t=>{e.textContent=t};try{peer&&peer.destroy()}catch{}
 peer=new Peer();peer.on('open',()=>{conn=peer.connect('hrslesson-'+code,{reliable:true});
  conn.on('open',()=>conn.send({t:'join',name}));conn.on('data',m=>{if(m.t==='st')sview(m)});
  conn.on('close',()=>{app.innerHTML='<div class="c"><h2>Lesson ended</h2><button onclick="location.reload()">Back</button></div>'});
- setTimeout(()=>{if(!conn.open)e.textContent='Could not connect — check the code and that your teacher is hosting.'},8000)});
-peer.on('error',()=>{e.textContent='Could not connect — check the code.'})}
+ setTimeout(()=>{if(!conn.open)fail('Still not connected. Check the code, make sure your teacher has started the lesson, or try another network.')},12000)});
+peer.on('error',er=>fail(er.type==='peer-unavailable'?'No lesson with that code is running. Check the code, and make sure your teacher has started hosting.':['network','server-error','socket-error','socket-closed','webrtc'].includes(er.type)?'Cannot reach the connection service. Check your internet or try another network.':'Could not connect ('+er.type+').'))}
 function sview(m){document.body.dataset.m='stage';const x=m.item;let h=`<div class="bar"><b class="f">${esc(m.title)}</b><span class="pts">${m.score} pts</span></div><div class="prog"><i style="width:${(m.idx+1)/Math.max(1,m.total)*100}%"></i></div><div class="board big">`;
 if(!x)h+='<p>Waiting for your teacher to start.</p>';
 else if(x.type==='q')h+=`<h2>${esc(x.q)}</h2>`+x.opts.map((o,k)=>`<button class="opt ${m.reveal?(k===m.ans?'ok':k===m.mine?'no':''):(k===m.mine?'sel':'')}" ${m.mine!==null||m.reveal?'disabled':''} onclick="conn.send({t:'ans',a:${k}})"><b class="ab">${'ABCD'[k]}</b>${esc(o)}</button>`).join('')+(m.reveal?`<p class="res">${m.mine===m.ans?'Correct, +100 points':'Not quite. The right answer is highlighted.'}</p>`:m.mine!==null?'<p class="mu">Answer locked in…</p>':'');

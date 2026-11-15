@@ -67,6 +67,11 @@ body[data-m=stage] input{background:var(--board2);color:var(--chalk);border-colo
 .m.u{background:var(--board);color:var(--chalk);margin-left:auto}.m.a{background:var(--paper);border:1px solid var(--line)}.m ol{margin:4px 0 8px 18px;padding:0}.m.a div{margin-top:8px}
 select{padding:10px;border:1.5px solid var(--line);border-radius:8px;background:#fff;color:var(--ink);font:inherit;max-width:100%}
 .fld{display:block;margin:12px 0;font-weight:600;font-size:14px}details.c summary{cursor:pointer}
+body.present header,body.present .bar,body.present .ctl{display:none}
+body.present,body.present *{cursor:none!important}
+.pcode{display:none}body.present .pcode{display:block;position:fixed;right:16px;bottom:12px;color:#b8c9c3;font-size:14px}.pcode b{color:var(--yel);letter-spacing:.15em;margin-left:6px}
+.hint{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:rgba(0,0,0,.8);color:#fff;padding:8px 14px;border-radius:8px;font-size:14px;transition:opacity .6s;z-index:9}
+.tr{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:8px 0;border-bottom:1px solid var(--line)}.tr .f{flex:1;min-width:140px}.badge{font-size:12px;padding:2px 8px;border-radius:999px;border:1px solid var(--line)}
 @media(prefers-reduced-motion:reduce){*{transition:none!important}}
 </style></head><body>
 <header><b class="logo"><i></i>Lumo</b><span id="hr"></span></header><main id="app"></main>
@@ -77,22 +82,28 @@ const ls=(k,d)=>{try{return JSON.parse(localStorage.getItem(k))??d}catch{return 
 let cfg={ai:true},fs=null,sel='/memory.md',user=ls('lc_session',null),lessons=[],L=null,peer=null,conns={},players={},H=null,sugs=[],aiSugs=[],conn=null;
 const app=$('#app');
 async function hash(p,salt){const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(salt+p));return[...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('')}
-const save=()=>sv('lc_l_'+user,lessons);
+let st;function save(){if(scope?.t==='remote'){clearTimeout(st);st=setTimeout(()=>rc&&rc.send({t:'save',lessons}),400)}else if(scope?.t==='mgr'){SC.lessons[scope.u]=lessons;saveSC()}else sv('lc_l_'+user,lessons)}
 function hdr(){document.body.dataset.m='app';$('#hr').innerHTML=user?`${esc(user)} <button class="g" onclick="settings()">Settings</button><button class="g" onclick="logout()">Log out</button>`:''}
-function logout(){user=null;localStorage.removeItem('lc_session');stopHost();home()}
+function logout(){stopHost();stopHub();closeRemote();scope=null;SC=null;role=null;user=null;localStorage.removeItem('lc_session');home()}
 function home(){hdr();user?dash():authView()}
 /* ---------- auth + join ---------- */
 function authView(){app.innerHTML=`<section class="hero"><h1>Join your class</h1><p class="mu">Enter the code shown on your teacher's screen.</p><div class="r"><input class="codein" id="jc" placeholder="CODE" maxlength="5" aria-label="Lesson code"><input class="f" id="jn" placeholder="Your name" aria-label="Your name"><button class="pri" onclick="join()">Join lesson</button></div><div class="err" id="je"></div></section>
 <section class="c tch"><h2>Teachers</h2><p class="mu">Log in to create and host lessons. Accounts are stored in this browser.</p>
-<div class="r"><input class="f" id="au" placeholder="Username" aria-label="Username"><input class="f" id="ap" type="password" placeholder="Password (6+ characters)" aria-label="Password"></div><button class="pri" onclick="auth(0)">Log in</button><button class="g" onclick="auth(1)">Create account</button><div class="err" id="ae"></div></section>`}
+<div class="r"><input class="f" id="au" placeholder="Username" aria-label="Username"><input class="f" id="ap" type="password" placeholder="Password (6+ characters)" aria-label="Password"></div><button class="pri" onclick="auth(0)">Log in</button><button class="g" onclick="auth(1)">Create account</button><div class="err" id="ae"></div></section>
+<details class="c"><summary><b>Join a school as a teacher</b></summary><p class="mu">Your principal manages your account, and your lessons are stored on the school's computer.</p>
+${DIR?`<div class="r"><input class="f" id="sq" placeholder="Search schools by name" aria-label="Search schools"><button onclick="schoolSearch()">Search</button></div><div id="sres"></div>`:'<p class="mu">School search is not set up on this site. Enter the code from your principal.</p>'}
+<div class="r"><input class="f" id="sc" placeholder="School code" maxlength="6" aria-label="School code" style="text-transform:uppercase"><button class="pri" onclick="schoolFind($('#sc').value)">Find school</button></div><div class="err" id="sge" style="color:var(--bad)"></div></details>
+<details class="c"><summary><b>Principals: create a school</b></summary><p class="mu">You manage teacher accounts and lessons. Lessons are stored and hosted on this computer, so keep Lumo open while teachers are working.</p>
+<div class="r"><input class="f" id="psn" placeholder="School name" aria-label="School name"><input class="f" id="psc" placeholder="City (optional)" aria-label="City"></div><div class="r"><input class="f" id="pu" placeholder="Your username" aria-label="Principal username"><input class="f" id="pp" type="password" placeholder="Password (6+ characters)" aria-label="Password"></div>
+<button class="pri" onclick="pauth()">Create school</button><div class="err" id="pe" style="color:var(--bad)"></div></details>`}
 async function auth(reg){const u=$('#au').value.trim(),p=$('#ap').value,us=ls('lc_users',{}),e=$('#ae');
 if(!u||p.length<6)return e.textContent='Enter a username and a 6+ character password.';
 if(reg){if(us[u])return e.textContent='Username taken.';const s=crypto.randomUUID();us[u]={s,h:await hash(p,s)};sv('lc_users',us)}
 else if(!us[u]||us[u].h!==await hash(p,us[u].s))return e.textContent='Wrong username or password.';
 user=u;sv('lc_session',u);dash()}
 /* ---------- dashboard ---------- */
-function dash(){hdr();loadU();lessons=ls('lc_l_'+user,[]);
-app.innerHTML=`<div class="c"><div class="r"><h2 class="f">Your lessons</h2><button class="pri" onclick="newL()">+ New lesson</button></div>${lessons.map((l,i)=>`<div class="r c"><div class="f"><b>${esc(l.title)}</b><div class="mu">${l.items.length} items</div></div><button onclick="edit(${i})">Edit</button><button class="pri" onclick="host(${i})">Host</button><button class="d" onclick="delL(${i})">Delete</button></div>`).join('')||'<p class="mu">No lessons yet. Create one by hand or let AI draft it.</p>'}</div>`}
+function dash(){hdr();loadU();if(scope?.t!=='remote')lessons=ls('lc_l_'+user,[]);
+app.innerHTML=`${banner()}<div class="c"><div class="r"><h2 class="f">Your lessons</h2><button class="pri" onclick="newL()">+ New lesson</button></div>${lessons.map((l,i)=>`<div class="r c"><div class="f"><b>${esc(l.title)}</b><div class="mu">${l.items.length} items</div></div><button onclick="edit(${i})">Edit</button><button class="pri" onclick="host(${i})">Host</button><button class="d" onclick="delL(${i})">Delete</button></div>`).join('')||'<p class="mu">No lessons yet. Create one by hand or let AI draft it.</p>'}</div>`}
 function newL(){lessons.push({title:'Untitled lesson',lb:false,quiz:true,items:[]});save();edit(lessons.length-1)}
 function delL(i){if(confirm('Delete this lesson?')){lessons.splice(i,1);save();dash()}}
 /* ---------- AI ---------- */
@@ -137,7 +148,7 @@ function chatHTML(){L.chat=L.chat||[];return`<div class="c"><div class="r"><b cl
 function msgsView(){const b=$('#msgs');b.innerHTML=msgsHTML();b.scrollTop=b.scrollHeight}
 const FALLBACK='You are Lumo, a teaching assistant inside a lesson editor. Help teachers plan lessons, write clear slides and fair four-option quiz questions. Be concise and accurate.';
 const saveFs=()=>sv('lc_fs_'+user,fs),np=p=>'/'+String(p||'').replace(/^\/+/,'').slice(0,80);
-function loadU(){cfg=ls('lc_set_'+user,{ai:true});fs=ls('lc_fs_'+user,null)}
+function loadU(){cfg=ls('lc_set_'+user,{ai:true});fs=ls('lc_fs_'+user,null);role=scope?.t==='remote'?null:(ls('lc_users',{})[user]||{}).role;SC=role==='principal'?ls('lc_school_'+user,null):null;if(SC)startHub()}
 async function skill(){try{const r=await fetch('SKILL.md',{cache:'no-cache'});if(r.ok)return await r.text()}catch{}return FALLBACK}
 async function ensureFs(){if(fs)return;fs={'/SKILL.md':await skill(),'/memory.md':'# Memory\n\nNotes the AI keeps about you and your classes.\n'};saveFs()}
 async function sysPrompt(){await ensureFs();return`${(fs['/SKILL.md']||FALLBACK).slice(0,7000)}
@@ -240,7 +251,7 @@ function clr(){if(confirm('Clear this lesson\'s chat history?')){L.chat=[];save(
 /* ---------- editor ---------- */
 let cur=0;
 function edit(i){cur=i;L=lessons[i];hdr();
-app.innerHTML=`<div class="c"><div class="r"><button class="g" onclick="dash()">← Back</button><input class="f" value="${esc(L.title)}" oninput="L.title=this.value;save()"><button class="pri" onclick="host(cur)">Host</button></div>
+app.innerHTML=`<div class="c"><div class="r"><button class="g" onclick="back()">← Back</button><input class="f" value="${esc(L.title)}" oninput="L.title=this.value;save()"><button class="pri" onclick="host(cur)">Host</button></div>
 <label class="t"><input type="checkbox" ${L.lb?'checked':''} onchange="L.lb=this.checked;save()">Leaderboard mode</label>
 <label class="t"><input type="checkbox" ${L.split!==false?'checked':''} onchange="L.split=this.checked;save()">Lesson first, then quiz</label>
 ${cfg.ai?`<label class="t"><input type="checkbox" ${L.quiz?'checked':''} onchange="L.quiz=this.checked;save()">Let AI write quiz questions</label>
@@ -255,32 +266,120 @@ ${x.type==='q'?`<input value="${esc(x.q)}" placeholder="Question" oninput="L.ite
 function add(t){L.items.push(t==='q'?{type:'q',q:'',opts:['','','',''],ans:0}:{type:'slide',title:'',body:''});save();edit(cur)}
 function rm(j){L.items.splice(j,1);save();edit(cur)}
 function mv(j,d){const k=j+d;if(k<0||k>=L.items.length)return;[L.items[j],L.items[k]]=[L.items[k],L.items[j]];save();edit(cur)}
-/* ---------- host ---------- */
-function stopHost(){try{peer&&peer.destroy()}catch{}peer=null;conns={};players={};conn=null}
-function seq(){const it=L.items;if(L.split===false)return it;const sl=it.filter(x=>x.type!=='q'),qs=it.filter(x=>x.type==='q');return sl.length&&qs.length?[...sl,{type:'slide',title:'Quiz time',body:'The lesson is finished. Get ready for the questions.'},...qs]:it}
-function host(i){stopHost();L=lessons[i];cur=i;sugs=[];
-H={code:Math.random().toString(36).slice(2,7).toUpperCase(),idx:0,reveal:false,lb:L.lb,items:seq()};
-peer=new Peer('hrslesson-'+H.code);
-peer.on('connection',c=>{conns[c.peer]=c;c.on('data',m=>{
- if(m.t==='join'){players[c.peer]={name:String(m.name).slice(0,20),score:0,ans:null};push(c.peer);hview()}
- else if(m.t==='ans'&&players[c.peer]&&!H.reveal&&players[c.peer].ans===null){players[c.peer].ans=m.a;push(c.peer);hview()}
- else if(m.t==='sug'){sugs.push({n:players[c.peer]?.name||'?',x:String(m.x).slice(0,300)});hview()}});
- c.on('close',()=>{delete conns[c.peer];delete players[c.peer];hview()})});
-peer.on('error',e=>{alert('Connection error: '+e.type)});hview()}
-const board=()=>Object.values(players).sort((a,b)=>b.score-a.score).map(p=>({n:p.name,s:p.score}));
-function pubItem(x){return x.type==='q'?{type:'q',q:x.q,opts:x.opts}:x}
-function push(id){const c=conns[id],p=players[id],x=H.items[H.idx];if(!c||!p)return;
-c.send({t:'st',title:L.title,idx:H.idx,total:H.items.length,item:x&&pubItem(x),reveal:H.reveal,ans:H.reveal?x?.ans:null,mine:p.ans,score:p.score,lb:H.lb?board().slice(0,5):null})}
-const pushAll=()=>Object.keys(conns).forEach(push);
-function go(d){H.idx=Math.max(0,Math.min(H.items.length-1,H.idx+d));H.reveal=false;Object.values(players).forEach(p=>p.ans=null);pushAll();hview()}
-function rev(){const x=H.items[H.idx];if(x?.type!=='q'||H.reveal)return;H.reveal=true;Object.values(players).forEach(p=>{if(p.ans===x.ans)p.score+=100});pushAll();hview()}
-function tglLb(v){H.lb=v;pushAll();hview()}
-function hview(){document.body.dataset.m='stage';const x=H.items[H.idx],n=Object.keys(players).length,answered=Object.values(players).filter(p=>p.ans!==null).length;
-app.innerHTML=`<div class="bar"><button class="g" onclick="stopHost();dash()">End lesson</button><div class="join">Students join with code<b class="code">${H.code}</b></div><span class="mu">${n} connected</span><label class="t"><input type="checkbox" ${H.lb?'checked':''} onchange="tglLb(this.checked)">Leaderboard</label></div>
-<div class="prog"><i style="width:${(H.idx+1)/Math.max(1,H.items.length)*100}%"></i></div>
-<div class="grid"><section><div class="board big">${x?(x.type==='q'?`<h2>${esc(x.q)}</h2>${x.opts.map((o,k)=>`<div class="opt ${H.reveal&&k===x.ans?'ok':''}"><b class="ab">${'ABCD'[k]}</b>${esc(o)}</div>`).join('')}<p class="mu">${answered} of ${n} answered</p>`:`<h2>${esc(x.title)}</h2><p>${esc(x.body)}</p>`):'<p>This lesson has no slides yet. End the lesson and add some in the editor.</p>'}</div>
-<div class="r"><button class="g" onclick="go(-1)">Previous</button><span class="mu">${H.idx+1} of ${H.items.length}</span><button class="pri" onclick="go(1)">Next</button>${x?.type==='q'?`<button onclick="rev()" ${H.reveal?'disabled':''}>Reveal answer</button>`:''}</div></section>
-<aside><div class="lb"><b>Leaderboard</b>${board().map((p,i)=>`<div class="rk"><span>${i+1}. ${esc(p.n)}</span><b>${p.s}</b></div>`).join('')||'<p class="mu">Waiting for students to join.</p>'}</div>${sugs.length?`<div class="lb"><b>Student suggestions</b>${sugs.map(s=>`<div class="sg"><b>${esc(s.n)}:</b> ${esc(s.x)}</div>`).join('')}</div>`:''}</aside></div>`}
+/* ---------- sessions (live lessons) ---------- */
+let sess=null,rs=null,rc=null,rpeer=null,sch=null,scope=null,rid=0,rpend={};
+function seq(l){const it=l.items;if(l.split===false)return it;const sl=it.filter(x=>x.type!=='q'),qs=it.filter(x=>x.type==='q');return sl.length&&qs.length?[...sl,{type:'slide',title:'Quiz time',body:'The lesson is finished. Get ready for the questions.'},...qs]:it}
+class Sess{
+ constructor(l,on){this.l=JSON.parse(JSON.stringify(l));this.items=seq(this.l);this.code=Math.random().toString(36).slice(2,7).toUpperCase();this.idx=0;this.reveal=false;this.lb=!!l.lb;this.pl={};this.cn={};this.sugs=[];this.on=on||(()=>{});this.onerr=e=>alert('Connection error: '+e);
+  this.peer=new Peer('hrslesson-'+this.code);
+  this.peer.on('connection',c=>{this.cn[c.peer]=c;c.on('data',m=>{const p=this.pl[c.peer];
+   if(m.t==='join'){this.pl[c.peer]={name:String(m.name).slice(0,20),score:0,ans:null};this.push(c.peer);this.on()}
+   else if(m.t==='ans'&&p&&!this.reveal&&p.ans===null){p.ans=m.a;this.push(c.peer);this.on()}
+   else if(m.t==='sug'){this.sugs.push({n:p?.name||'?',x:String(m.x).slice(0,300)});this.on()}});
+   c.on('close',()=>{delete this.cn[c.peer];delete this.pl[c.peer];this.on()})});
+  this.peer.on('error',e=>this.onerr(e.type))}
+ board(){return Object.values(this.pl).sort((a,b)=>b.score-a.score).map(p=>({n:p.name,s:p.score}))}
+ push(id){const c=this.cn[id],p=this.pl[id],x=this.items[this.idx];if(!c||!p)return;c.send({t:'st',title:this.l.title,idx:this.idx,total:this.items.length,item:x&&(x.type==='q'?{type:'q',q:x.q,opts:x.opts}:x),reveal:this.reveal,ans:this.reveal?x?.ans:null,mine:p.ans,score:p.score,lb:this.lb?this.board().slice(0,5):null})}
+ pushAll(){Object.keys(this.cn).forEach(id=>this.push(id))}
+ go(d){this.idx=Math.max(0,Math.min(this.items.length-1,this.idx+d));this.reveal=false;Object.values(this.pl).forEach(p=>p.ans=null);this.pushAll();this.on()}
+ rev(){const x=this.items[this.idx];if(x?.type!=='q'||this.reveal)return;this.reveal=true;Object.values(this.pl).forEach(p=>{if(p.ans===x.ans)p.score+=100});this.pushAll();this.on()}
+ tgl(v){this.lb=!!v;this.pushAll();this.on()}
+ state(){const pl=Object.values(this.pl);return{code:this.code,title:this.l.title,idx:this.idx,total:this.items.length,item:this.items[this.idx]||null,reveal:this.reveal,lb:this.lb,n:pl.length,answered:pl.filter(p=>p.ans!==null).length,board:this.board(),sugs:this.sugs}}
+ end(){try{this.peer.destroy()}catch{}}}
+const act=(a,v)=>scope?.t==='remote'?(rc&&rs&&rc.send({t:'cmd',a,v})):sess?.[a](v);
+const go=d=>act('go',d),rev=()=>act('rev'),tglLb=v=>act('tgl',v);
+function stopHost(){if(sess){sess.end();sess=null}if(hosting&&scope?.t==='remote'&&rc)rc.send({t:'end'});rs=null;hosting=false;present(false)}
+function endHost(){stopHost();scope?.t==='mgr'?schoolView():dash()}
+function host(i){stopHost();
+ if(scope?.t==='remote'){hosting=true;app.innerHTML='<div class="c">Starting the lesson on the school computer…</div>';rc.send({t:'host',i});return}
+ sess=new Sess(lessons[i],()=>hview(sess.state()));hosting=true;hview(sess.state())}
+function hview(S){document.body.dataset.m='stage';const x=S.item;
+app.innerHTML=`<div class="bar"><button class="g" onclick="endHost()">End lesson</button><button class="g" onclick="toggleFull()">Fullscreen</button><div class="join">Students join with code<b class="code">${S.code}</b></div><span class="mu">${S.n} connected</span><label class="t"><input type="checkbox" ${S.lb?'checked':''} onchange="tglLb(this.checked)">Leaderboard</label></div>
+<div class="prog"><i style="width:${(S.idx+1)/Math.max(1,S.total)*100}%"></i></div>
+<div class="grid"><section><div class="board big">${x?(x.type==='q'?`<h2>${esc(x.q)}</h2>${x.opts.map((o,k)=>`<div class="opt ${S.reveal&&k===x.ans?'ok':''}"><b class="ab">${'ABCD'[k]}</b>${esc(o)}</div>`).join('')}<p class="mu">${S.answered} of ${S.n} answered</p>`:`<h2>${esc(x.title)}</h2><p>${esc(x.body)}</p>`):'<p>This lesson has no slides yet. End the lesson and add some in the editor.</p>'}</div>
+<div class="r ctl"><button class="g" onclick="go(-1)">Previous</button><span class="mu">${S.idx+1} of ${S.total}</span><button class="pri" onclick="go(1)">Next</button>${x?.type==='q'?`<button onclick="rev()" ${S.reveal?'disabled':''}>Reveal answer</button>`:''}</div></section>
+<aside><div class="lb"><b>Leaderboard</b>${S.board.map((p,i)=>`<div class="rk"><span>${i+1}. ${esc(p.n)}</span><b>${p.s}</b></div>`).join('')||'<p class="mu">Waiting for students to join.</p>'}</div>${S.sugs.length?`<div class="lb"><b>Student suggestions</b>${S.sugs.map(s=>`<div class="sg"><b>${esc(s.n)}:</b> ${esc(s.x)}</div>`).join('')}</div>`:''}</aside></div><div class="pcode">Code<b>${S.code}</b></div>`}
+/* ---------- school: teacher side ---------- */
+const BAD='Could not reach the school computer. Check the code, and ask the principal to keep Lumo open.';
+function closeRemote(){const p=rpeer;rpeer=rc=null;rs=null;rpend={};try{p&&p.destroy()}catch{}}
+function connectHub(id){return new Promise((ok,no)=>{closeRemote();const p=rpeer=new Peer(),to=setTimeout(()=>no(Error(BAD)),9000);
+ p.on('open',()=>{const c=p.connect('lumo-s-'+id,{reliable:true});c.on('open',()=>{clearTimeout(to);rc=c;c.on('data',rmsg);
+  c.on('close',()=>{if(rc===c){rc=null;if(scope?.t==='remote'){alert('Lost the connection to the school computer.');logout()}}});ok(c)})});
+ p.on('error',()=>{clearTimeout(to);no(Error(BAD))})})}
+const call=m=>new Promise(res=>{const i=++rid;rpend[i]=res;rc.send({...m,r:i})});
+function rmsg(m){if(m.r&&rpend[m.r]){rpend[m.r](m);delete rpend[m.r]}else if(m.t==='ss'){rs=m.s;if(hosting)hview(rs)}}
+async function schoolFind(id){id=String(id).trim().toUpperCase();const e=$('#sge');if(!/^[A-Z0-9]{6}$/.test(id)){e.textContent='School codes have 6 letters or numbers.';return}
+ e.textContent='Connecting…';try{await connectHub(id);const r=await call({t:'info'});sch={id,name:r.name,city:r.city};schoolJoinView()}catch(x){e.textContent=x.message}}
+async function schoolSearch(){const q=$('#sq').value.trim(),o=$('#sres');o.textContent='Searching…';
+ try{const l=await(await fetch(DIR+'/schools?q='+encodeURIComponent(q))).json();
+  o.innerHTML=l.filter(x=>/^[A-Z0-9]{6}$/.test(x.id)).map(x=>`<div class="tr"><div class="f"><b>${esc(x.name)}</b><div class="mu">${esc(x.city||'')}</div></div><button class="pri" onclick="schoolFind('${x.id}')">Select</button></div>`).join('')||'<p class="mu">No schools found.</p>'}
+ catch{o.textContent='Search is unavailable right now. Enter the school code instead.'}}
+function schoolJoinView(){app.innerHTML=`<div class="c tch"><div class="r"><button class="g" onclick="authView()">← Back</button><h2 class="f">${esc(sch.name)}</h2></div><p class="mu">${esc(sch.city||'')} School code ${sch.id}. The principal manages your account, and your lessons are stored on the school computer.</p>
+<div class="r"><input class="f" id="su" placeholder="Username" aria-label="Username"><input class="f" id="sp" type="password" placeholder="Password (6+ characters)" aria-label="Password"></div>
+<button class="pri" onclick="schoolLogin()">Log in</button><button class="g" onclick="schoolReq()">Request to join</button><div class="err" id="sge"></div></div>`}
+async function schoolAsk(m){const e=$('#sge');if(!rc){try{await connectHub(sch.id)}catch(x){e.textContent=x.message;return null}}return call(m)}
+async function schoolReq(){const u=$('#su').value.trim(),p=$('#sp').value,r=await schoolAsk({t:'req',u,p});if(r)$('#sge').textContent=r.msg}
+async function schoolLogin(){const u=$('#su').value.trim(),p=$('#sp').value,r=await schoolAsk({t:'login',u,p});if(!r)return;if(!r.ok){$('#sge').textContent=r.msg;return}
+ user=u;scope={t:'remote'};lessons=r.lessons;if(r.s){rs=r.s;hosting=true;hdr();hview(rs)}else dash()}
+/* ---------- school: principal side ---------- */
+const DIR='';/* optional: URL of the school directory Worker, see README */
+let SC=null,role=null,hub=null,hubErr='',hubSess={};const hubCs=new Set(),saveSC=()=>sv('lc_school_'+user,SC);
+const refreshSchool=()=>{if($('#schoolview'))schoolView()};
+function startHub(){if(hub||!SC)return;hub=new Peer('lumo-s-'+SC.id);hub.on('open',refreshSchool);
+ hub.on('error',e=>{hubErr=e.type==='unavailable-id'?'This school is already open in another tab or on another computer.':'Server error: '+e.type;refreshSchool()});
+ hub.on('connection',c=>{hubCs.add(c);c.on('close',()=>hubCs.delete(c));c.on('data',async m=>{const rep=o=>c.send({r:m.r,...o}),u=c.u,mem=u&&SC.members[u];
+  if(m.t==='info')return rep({name:SC.name,city:SC.city});
+  if(m.t==='req'){const n=String(m.u||'').trim();if(!/^[A-Za-z0-9_.-]{2,30}$/.test(n)||String(m.p||'').length<6)return rep({msg:'Use a username of 2-30 letters or numbers and a 6+ character password.'});
+   if(SC.members[n]||n===user)return rep({msg:'That username is taken.'});const sa=crypto.randomUUID();SC.members[n]={s:sa,h:await hash(m.p,sa),st:'pending'};SC.lessons[n]=[];saveSC();refreshSchool();return rep({msg:'Request sent. You can log in once the principal accepts it.'})}
+  if(m.t==='login'){const n=String(m.u||'').trim(),mm=SC.members[n];if(!mm||mm.h!==await hash(String(m.p||''),mm.s))return rep({ok:false,msg:'Wrong username or password.'});
+   if(mm.st==='pending')return rep({ok:false,msg:'The principal has not accepted your request yet.'});if(mm.st==='off')return rep({ok:false,msg:'This account is suspended. Ask your principal.'});
+   c.u=n;const ss=hubSess[n];if(ss)ss.on=()=>c.open&&c.send({t:'ss',s:ss.state()});return rep({ok:true,lessons:SC.lessons[n]||[],s:ss&&ss.state()})}
+  if(!mem||mem.st!=='ok')return;
+  if(m.t==='save'){if(Array.isArray(m.lessons)&&JSON.stringify(m.lessons).length<2e6){SC.lessons[u]=m.lessons;saveSC();refreshSchool()}}
+  else if(m.t==='host'){const l=(SC.lessons[u]||[])[m.i];if(!l)return;hubSess[u]?.end();const ss=new Sess(l,()=>{if(c.open)c.send({t:'ss',s:ss.state()});refreshSchool()});ss.onerr=e=>{if(c.open)c.send({t:'ss',s:ss.state()})};hubSess[u]=ss;c.send({t:'ss',s:ss.state()});refreshSchool()}
+  else if(m.t==='cmd'&&['go','rev','tgl'].includes(m.a))hubSess[u]?.[m.a](m.v);
+  else if(m.t==='end'){hubSess[u]?.end();delete hubSess[u];refreshSchool()}})})}
+function stopHub(){Object.values(hubSess).forEach(x=>x.end());hubSess={};try{hub&&hub.destroy()}catch{}hub=null;hubErr='';hubCs.clear()}
+function kick(n){hubSess[n]?.end();delete hubSess[n];hubCs.forEach(c=>{if(c.u===n)c.close()})}
+function schoolView(){scope=null;hdr();loadU();const names=Object.keys(SC.members),pend=names.filter(n=>SC.members[n].st==='pending'),ok=names.filter(n=>SC.members[n].st!=='pending'),live=Object.entries(hubSess);
+app.innerHTML=`<div class="c" id="schoolview"><div class="r"><button class="g" onclick="dash()">← Back</button><h2 class="f">${esc(SC.name)}</h2></div>
+<div class="mu">School code (give this to teachers)</div><div class="code" style="color:var(--board)">${SC.id}</div><div class="mu">${esc(hubErr||(hub&&hub.open?'Server online':'Starting…'))}</div>
+<p class="mu">Teachers connect to this computer. Their lessons are stored here and live lessons run here, so keep Lumo open and this computer online while teaching.</p>
+${DIR?`<label class="t"><input type="checkbox" ${SC.listed?'checked':''} onchange="listSchool(this.checked)">Show in school search</label>`:'<p class="mu">School search is not set up on this site, so give teachers the school code.</p>'}</div>
+<div class="c"><b>Join requests</b>${pend.map(n=>`<div class="tr"><b class="f">${esc(n)}</b><button class="pri" onclick="memAct(${names.indexOf(n)},'ok')">Accept</button><button class="d" onclick="memAct(${names.indexOf(n)},'deny')">Decline</button></div>`).join('')||'<p class="mu">No requests waiting.</p>'}</div>
+<div class="c"><b>Teachers</b>${ok.map(n=>{const k=names.indexOf(n),m=SC.members[n];return`<div class="tr"><div class="f"><b>${esc(n)}</b> <span class="badge">${m.st==='off'?'Suspended':'Active'}</span><div class="mu">${(SC.lessons[n]||[]).length} lessons</div></div><button class="g" onclick="memAct(${k},'${m.st==='off'?'on':'off'}')">${m.st==='off'?'Reinstate':'Suspend'}</button><button class="g" onclick="memAct(${k},'pw')">Reset password</button><button class="d" onclick="memAct(${k},'rm')">Remove</button></div>`}).join('')||'<p class="mu">No teachers yet.</p>'}</div>
+<div class="c"><b>All lessons</b>${ok.map(n=>{const k=names.indexOf(n);return(SC.lessons[n]||[]).map((l,j)=>`<div class="tr"><div class="f"><b>${esc(l.title)}</b><div class="mu">${esc(n)}, ${l.items.length} items</div></div><button class="g" onclick="lesAct(${k},${j},'edit')">Edit</button><button class="pri" onclick="lesAct(${k},${j},'host')">Host</button><button class="d" onclick="lesAct(${k},${j},'del')">Delete</button></div>`).join('')}).join('')||'<p class="mu">No lessons yet.</p>'}</div>
+<div class="c"><b>Live now</b>${live.map(([n,x],k)=>`<div class="tr"><div class="f"><b>${esc(x.l.title)}</b><div class="mu">${esc(n)}, code ${x.code}, ${Object.keys(x.pl).length} students</div></div><button class="d" onclick="liveEnd(${k})">End</button></div>`).join('')||'<p class="mu">No live lessons.</p>'}</div>`}
+function memAct(k,a){const n=Object.keys(SC.members)[k],m=SC.members[n];if(!m)return;
+ if(a==='ok'||a==='on')m.st='ok';
+ else if(a==='off'){m.st='off';kick(n)}
+ else if(a==='deny'||a==='rm'){if(a==='rm'&&!confirm('Remove '+n+' and delete their lessons?'))return;kick(n);delete SC.members[n];delete SC.lessons[n]}
+ else if(a==='pw'){const p=prompt('New password for '+n+' (6+ characters)');if(!p||p.length<6)return;hash(p,m.s).then(h=>{m.h=h;saveSC();kick(n);schoolView()});return}
+ saveSC();schoolView()}
+function lesAct(k,j,a){const n=Object.keys(SC.members)[k],l=SC.lessons[n]||(SC.lessons[n]=[]);
+ if(a==='del'){if(confirm('Delete this lesson?')){l.splice(j,1);saveSC();schoolView()}return}
+ scope={t:'mgr',u:n};lessons=l;a==='edit'?edit(j):host(j)}
+function liveEnd(k){const n=Object.keys(hubSess)[k];if(n){hubSess[n].end();delete hubSess[n];schoolView()}}
+function back(){scope?.t==='mgr'?schoolView():dash()}
+async function listSchool(on){try{if(on){SC.token=SC.token||crypto.randomUUID();const r=await fetch(DIR+'/schools',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:SC.id,name:SC.name,city:SC.city,token:SC.token})});if(!r.ok)throw Error('HTTP '+r.status)}
+ else await fetch(DIR+'/schools?id='+SC.id+'&token='+SC.token,{method:'DELETE'});SC.listed=on;saveSC()}catch(e){alert('Could not update school search: '+e.message)}schoolView()}
+async function pauth(){const sn=$('#psn').value.trim(),city=$('#psc').value.trim(),u=$('#pu').value.trim(),p=$('#pp').value,e=$('#pe');
+ if(!sn||!u||p.length<6){e.textContent='Enter a school name, username and a 6+ character password.';return}
+ const us=ls('lc_users',{});if(us[u]){e.textContent='Username taken.';return}
+ const sa=crypto.randomUUID(),id=Array.from(crypto.getRandomValues(new Uint8Array(6)),b=>'ABCDEFGHJKMNPQRSTUVWXYZ23456789'[b%31]).join('');
+ us[u]={s:sa,h:await hash(p,sa),role:'principal'};sv('lc_users',us);sv('lc_school_'+u,{id,name:sn.slice(0,60),city:city.slice(0,40),members:{},lessons:{},listed:false});user=u;sv('lc_session',u);dash()}
+function banner(){const pend=SC?Object.values(SC.members).filter(m=>m.st==='pending').length:0;
+ if(SC&&role==='principal')return`<div class="c r"><div class="f"><b>${esc(SC.name)}</b><div class="mu">School code ${SC.id}. Keep Lumo open so teachers can connect.</div></div><button class="pri" onclick="schoolView()">Manage school${pend?` (${pend} waiting)`:''}</button></div>`;
+ if(scope?.t==='remote')return`<div class="c mu">Signed in to ${esc(sch.name)}. Your lessons are stored on the school computer.</div>`;return''}
+/* ---------- presenting ---------- */
+let hosting=false;
+function hint(t){document.querySelector('.hint')?.remove();const d=document.createElement('div');d.className='hint';d.textContent=t;document.body.appendChild(d);setTimeout(()=>{d.style.opacity=0;setTimeout(()=>d.remove(),700)},4500)}
+function present(on){document.body.classList.toggle('present',on);if(!on&&document.fullscreenElement)document.exitFullscreen().catch(()=>{});if(on)hint('Space or → next · ← back · R reveal answer · F or Esc to exit')}
+function toggleFull(){const on=!document.body.classList.contains('present');present(on);if(on&&document.documentElement.requestFullscreen)document.documentElement.requestFullscreen().catch(()=>{})}
+document.addEventListener('fullscreenchange',()=>{if(!document.fullscreenElement)document.body.classList.remove('present')});
+document.addEventListener('keydown',e=>{if(!hosting||e.ctrlKey||e.metaKey||e.altKey)return;const t=e.target.tagName;if(t==='INPUT'||t==='TEXTAREA'||t==='SELECT')return;const k=e.key;
+ if(k===' '||k==='ArrowRight'||k==='PageDown')go(1);else if(k==='ArrowLeft'||k==='PageUp')go(-1);else if(k==='r'||k==='R')rev();else if(k==='f'||k==='F')toggleFull();else if(k==='Escape'&&document.body.classList.contains('present'))present(false);else return;
+ e.preventDefault();if(document.activeElement?.tagName==='BUTTON')document.activeElement.blur()});
 /* ---------- student ---------- */
 function join(){const code=$('#jc').value.trim().toUpperCase(),name=$('#jn').value.trim(),e=$('#je');
 if(!code||!name)return e.textContent='Enter the code and your name.';e.textContent='Connecting…';

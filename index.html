@@ -82,12 +82,12 @@ const ls=(k,d)=>{try{return JSON.parse(localStorage.getItem(k))??d}catch{return 
 let cfg={ai:true},fs=null,sel='/memory.md',user=ls('lc_session',null),lessons=[],L=null,peer=null,conns={},players={},H=null,sugs=[],aiSugs=[],conn=null;
 const app=$('#app');
 async function hash(p,salt){const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(salt+p));return[...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('')}
-let st;function save(){if(scope?.t==='remote'){clearTimeout(st);st=setTimeout(()=>rc&&rc.send({t:'save',lessons}),400)}else if(scope?.t==='mgr'){SC.lessons[scope.u]=lessons;saveSC()}else sv('lc_l_'+user,lessons)}
+let st;function save(){if(scope?.t==='srv'||scope?.t==='smgr'){clearTimeout(st);const sc=scope,l0=lessons;st=setTimeout(()=>api('PUT',sc.t==='smgr'?'/api/admin/lessons?u='+encodeURIComponent(sc.u):'/api/lessons',{lessons:l0}).catch(e=>hint('Could not save: '+e.message)),500);return}if(scope?.t==='remote'){clearTimeout(st);st=setTimeout(()=>rc&&rc.send({t:'save',lessons}),400)}else if(scope?.t==='mgr'){SC.lessons[scope.u]=lessons;saveSC()}else sv('lc_l_'+user,lessons)}
 function hdr(){document.body.dataset.m='app';$('#hr').innerHTML=user?`${esc(user)} <button class="g" onclick="settings()">Settings</button><button class="g" onclick="logout()">Log out</button>`:''}
-function logout(){stopHost();stopHub();closeRemote();scope=null;SC=null;role=null;user=null;localStorage.removeItem('lc_session');home()}
-function home(){hdr();user?dash():authView()}
+function logout(){stopHost();srvClear();stopHub();closeRemote();scope=null;SC=null;role=null;user=null;localStorage.removeItem('lc_session');home()}
+function home(){if(WORKER){const s=ls('lc_srv',null);if(s&&s.tok){SRV=s;user=s.u;scope={t:'srv'};hdr();app.innerHTML='<div class="c mu">Loading…</div>';api('GET','/api/me').then(j=>{srvSet(j);dash()}).catch(()=>{if(!SRV)return;srvClear();user=null;scope=null;hdr();authView()});return}user=null;scope=null;hdr();authView();return}hdr();user?dash():authView()}
 /* ---------- auth + join ---------- */
-function authView(){app.innerHTML=`<section class="hero"><h1>Join your class</h1><p class="mu">Enter the code shown on your teacher's screen.</p><div class="r"><input class="codein" id="jc" placeholder="CODE" maxlength="5" aria-label="Lesson code"><input class="f" id="jn" placeholder="Your name" aria-label="Your name"><button class="pri" onclick="join()">Join lesson</button></div><div class="err" id="je"></div><button class="g" onclick="connCheck()">Test my connection</button><div class="mu" id="cc" style="margin-top:8px"></div></section>
+function authView(){if(WORKER)return srvAuthView();app.innerHTML=`<section class="hero"><h1>Join your class</h1><p class="mu">Enter the code shown on your teacher's screen.</p><div class="r"><input class="codein" id="jc" placeholder="CODE" maxlength="5" aria-label="Lesson code"><input class="f" id="jn" placeholder="Your name" aria-label="Your name"><button class="pri" onclick="join()">Join lesson</button></div><div class="err" id="je"></div><button class="g" onclick="connCheck()">Test my connection</button><div class="mu" id="cc" style="margin-top:8px"></div></section>
 <section class="c tch"><h2>Teachers</h2><p class="mu">Log in to create and host lessons. Accounts are stored in this browser.</p>
 <div class="r"><input class="f" id="au" placeholder="Username" aria-label="Username"><input class="f" id="ap" type="password" placeholder="Password (6+ characters)" aria-label="Password"></div><button class="pri" onclick="auth(0)">Log in</button><button class="g" onclick="auth(1)">Create account</button><div class="err" id="ae"></div></section>
 <details class="c"><summary><b>Join a school as a teacher</b></summary><p class="mu">Your principal manages your account, and your lessons are stored on the school's computer.</p>
@@ -102,7 +102,7 @@ if(reg){if(us[u])return e.textContent='Username taken.';const s=crypto.randomUUI
 else if(!us[u]||us[u].h!==await hash(p,us[u].s))return e.textContent='Wrong username or password.';
 user=u;sv('lc_session',u);dash()}
 /* ---------- dashboard ---------- */
-function dash(){hdr();loadU();if(scope?.t!=='remote')lessons=ls('lc_l_'+user,[]);
+function dash(){hdr();loadU();if(!scope)lessons=ls('lc_l_'+user,[]);
 app.innerHTML=`${banner()}<div class="c"><div class="r"><h2 class="f">Your lessons</h2><button class="pri" onclick="newL()">+ New lesson</button></div>${lessons.map((l,i)=>`<div class="r c"><div class="f"><b>${esc(l.title)}</b><div class="mu">${l.items.length} items</div></div><button onclick="edit(${i})">Edit</button><button class="pri" onclick="host(${i})">Host</button><button class="d" onclick="delL(${i})">Delete</button></div>`).join('')||'<p class="mu">No lessons yet. Create one by hand or let AI draft it.</p>'}</div>`}
 function newL(){lessons.push({title:'Untitled lesson',lb:false,quiz:true,items:[]});save();edit(lessons.length-1)}
 function delL(i){if(confirm('Delete this lesson?')){lessons.splice(i,1);save();dash()}}
@@ -148,7 +148,7 @@ function chatHTML(){L.chat=L.chat||[];return`<div class="c"><div class="r"><b cl
 function msgsView(){const b=$('#msgs');b.innerHTML=msgsHTML();b.scrollTop=b.scrollHeight}
 const FALLBACK='You are Lumo, a teaching assistant inside a lesson editor. Help teachers plan lessons, write clear slides and fair four-option quiz questions. Be concise and accurate.';
 const saveFs=()=>sv('lc_fs_'+user,fs),np=p=>'/'+String(p||'').replace(/^\/+/,'').slice(0,80);
-function loadU(){cfg=ls('lc_set_'+user,{ai:true});fs=ls('lc_fs_'+user,null);role=scope?.t==='remote'?null:(ls('lc_users',{})[user]||{}).role;SC=role==='principal'?ls('lc_school_'+user,null):null;if(SC)startHub()}
+function loadU(){cfg=ls('lc_set_'+user,{ai:true});fs=ls('lc_fs_'+user,null);role=SRV?SRV.role:scope?.t==='remote'?null:(ls('lc_users',{})[user]||{}).role;SC=role==='principal'&&!SRV?ls('lc_school_'+user,null):null;if(SC)startHub()}
 async function skill(){try{const r=await fetch('SKILL.md',{cache:'no-cache'});if(r.ok)return await r.text()}catch{}return FALLBACK}
 async function ensureFs(){if(fs)return;fs={'/SKILL.md':await skill(),'/memory.md':'# Memory\n\nNotes the AI keeps about you and your classes.\n'};saveFs()}
 async function sysPrompt(){await ensureFs();return`${(fs['/SKILL.md']||FALLBACK).slice(0,7000)}
@@ -200,7 +200,7 @@ let mlist=[];
 const saveCfg=()=>sv('lc_set_'+user,cfg),today=()=>new Date().toISOString().slice(0,10);
 const useToday=()=>{const u=ls('lc_use',{});return u.d===today()?u.n:0};
 const norm=(h,p)=>{const o=[];for(const m of [...(h||[]),{role:'user',content:p}]){const r=m.role==='user'?'user':'assistant',l=o[o.length-1];if(l&&l.role===r)l.content+='\n\n'+m.content;else if(l||r==='user')o.push({role:r,content:m.content})}return o};
-async function llm(sys,p,web,h,c=cfg){if(c===cfg&&scope?.t==='remote'&&sch?.ai){const rr=await call({t:'llm',sys,p,web,h});if(rr.err)throw Error(rr.err);return rr.text}const P=c.prov||'builtin';let url,hd={'Content-Type':'application/json'},b,r,j;
+async function llm(sys,p,web,h,c=cfg){if(c===cfg&&SRV&&SRV.school?.ai){const rs2=await api('POST','/api/ai',{sys,p,web,h});return rs2.text}if(c===cfg&&scope?.t==='remote'&&sch?.ai){const rr=await call({t:'llm',sys,p,web,h});if(rr.err)throw Error(rr.err);return rr.text}const P=c.prov||'builtin';let url,hd={'Content-Type':'application/json'},b,r,j;
  if(P==='builtin'){const n=useToday();if(n>=LIMIT)throw Error(`Built-in AI is limited to ${LIMIT} requests a day. Add your own API key in Settings > Advanced.`);sv('lc_use',{d:today(),n:n+1});
   b={model:MODEL,messages:[{role:'system',content:sys},...(h||[]),{role:'user',content:p}]};if(web)b.tools=[{type:'browser_search'}];
   r=await fetch(PROXY,{method:'POST',headers:hd,body:JSON.stringify(b)});j=await r.json();return j.choices?.[0]?.message?.content||j.reply||j.text||j.content||''}
@@ -211,7 +211,7 @@ async function llm(sys,p,web,h,c=cfg){if(c===cfg&&scope?.t==='remote'&&sch?.ai){
  r=await fetch(url,{method:'POST',headers:hd,body:JSON.stringify(b)});j=await r.json().catch(()=>({}));
  if(!r.ok)throw Error(j.error?.message||(typeof j.error==='string'?j.error:'HTTP '+r.status));
  return P==='claude'?(j.content||[]).filter(c=>c.type==='text').map(c=>c.text).join(''):P==='gemini'?(j.candidates?.[0]?.content?.parts||[]).map(c=>c.text||'').join(''):j.choices?.[0]?.message?.content||''}
-function advHTML(){if(scope?.t==='remote'&&sch?.ai)return'<p class="mu">Your principal has set up the school AI, so your AI requests use it. You do not need an API key.</p>';const P=cfg.prov||'builtin',d=PROV[P],ml=mlist.length?mlist:d.models;
+function advHTML(){if((scope?.t==='remote'&&sch?.ai)||(SRV&&SRV.school?.ai))return'<p class="mu">Your principal has set up the school AI, so your AI requests use it. You do not need an API key.</p>';const P=cfg.prov||'builtin',d=PROV[P],ml=mlist.length?mlist:d.models;
  return`<label class="fld">Provider<select onchange="cfg.prov=this.value;mlist=[];saveCfg();advView()">${Object.entries(PROV).map(([k,v])=>`<option value="${k}" ${k===P?'selected':''}>${v.n}</option>`).join('')}</select></label>
 ${P==='builtin'?`<p class="mu">Uses the shared HRS proxy with a fixed model. Limited to ${LIMIT} requests a day in this browser (used today: ${useToday()}). Each chat message can use several requests.</p>`
 :`<label class="fld">API key<input type="password" autocomplete="off" placeholder="Paste your ${d.n} API key" value="${esc((cfg.keys||{})[P]||'')}" oninput="(cfg.keys=cfg.keys||{})['${P}']=this.value.trim();saveCfg()"></label>
@@ -289,7 +289,7 @@ class RPeer{constructor(id){this.id=id||null;this.key=crypto.randomUUID();this.h
  destroy(){this.destroyed=true;clearInterval(this.iv);try{this.ws.close()}catch{}}}
 if(RELAY)window.Peer=RPeer;
 function tryPeer(id){return new Promise(res=>{let p;try{p=new Peer(id)}catch(e){return res({err:e.message})}const to=setTimeout(()=>res({p,err:'timeout'}),8000);p.on('open',()=>{clearTimeout(to);res({p})});p.on('error',e=>{clearTimeout(to);res({p,err:e.type})})})}
-async function connCheck(){const o=$('#cc'),L=[],add=t=>{L.push(t);o.innerHTML=L.map(x=>`<div>${esc(x)}</div>`).join('')};
+async function connCheck(){if(WORKER)return connCheckSrv();const o=$('#cc'),L=[],add=t=>{L.push(t);o.innerHTML=L.map(x=>`<div>${esc(x)}</div>`).join('')};
  add(RELAY?'Connection service: Lumo relay.':'Connection service: free PeerJS cloud.');
  if(typeof Peer==='undefined'){add('Problem: the connection library did not load. It may be blocked on this network.');return}
  add('Connection library loaded.');
@@ -323,12 +323,12 @@ class Sess{
  tgl(v){this.lb=!!v;this.pushAll();this.on()}
  state(){const pl=Object.values(this.pl);return{ok:this.ok,err:this.err,code:this.code,title:this.l.title,idx:this.idx,total:this.items.length,item:this.items[this.idx]||null,reveal:this.reveal,lb:this.lb,n:pl.length,answered:pl.filter(p=>p.ans!==null).length,board:this.board(),sugs:this.sugs}}
  end(){clearInterval(this.iv);try{this.peer.destroy()}catch{}}}
-const act=(a,v)=>scope?.t==='remote'?(rc&&rs&&rc.send({t:'cmd',a,v})):sess?.[a](v);
+const act=(a,v)=>srvHost?sCmd(a,v):scope?.t==='remote'?(rc&&rs&&rc.send({t:'cmd',a,v})):sess?.[a](v);
 const go=d=>act('go',d),rev=()=>act('rev'),tglLb=v=>act('tgl',v);
-function stopHost(){if(sess){sess.end();sess=null}if(hosting&&scope?.t==='remote'&&rc)rc.send({t:'end'});rs=null;hosting=false;present(false)}
+function stopHost(){if(srvHost){const h=srvHost;srvHost=null;api('POST','/api/host/end',{code:h.code,hk:h.hk}).catch(()=>{})}if(sess){sess.end();sess=null}if(hosting&&scope?.t==='remote'&&rc)rc.send({t:'end'});rs=null;hosting=false;present(false)}
 function copyLink(c){const u=location.origin+location.pathname+'?join='+c;if(navigator.clipboard)navigator.clipboard.writeText(u).then(()=>hint('Join link copied'),()=>prompt('Copy this link',u));else prompt('Copy this link',u)}
-function endHost(){stopHost();scope?.t==='mgr'?schoolView():dash()}
-function host(i){stopHost();
+function endHost(){stopHost();scope?.t==='mgr'||scope?.t==='smgr'?schoolView():dash()}
+function host(i){stopHost();if(WORKER&&(scope?.t==='srv'||scope?.t==='smgr'))return sHost(i);
  if(scope?.t==='remote'){hosting=true;app.innerHTML='<div class="c">Starting the lesson on the school computer…</div>';rc.send({t:'host',i});return}
  sess=new Sess(lessons[i],()=>hview(sess.state()));hosting=true;hview(sess.state())}
 function hview(S){document.body.dataset.m='stage';const x=S.item;
@@ -382,7 +382,7 @@ function startHub(){if(hub||!SC)return;hub=new Peer('lumo-s-'+SC.id);hub.on('ope
   else if(m.t==='end'){hubSess[u]?.end();delete hubSess[u];refreshSchool()}})})}
 function stopHub(){clearInterval(hubIv);Object.values(hubSess).forEach(x=>x.end());hubSess={};try{hub&&hub.destroy()}catch{}hub=null;hubErr='';hubCs.clear()}
 function kick(n){hubSess[n]?.end();delete hubSess[n];hubCs.forEach(c=>{if(c.u===n)c.close()})}
-function schoolView(){scope=null;hdr();loadU();if(!SC){dash();return}const names=Object.keys(SC.members),pend=names.filter(n=>SC.members[n].st==='pending'),ok=names.filter(n=>SC.members[n].st!=='pending'),live=Object.entries(hubSess);
+function schoolView(){if(WORKER&&SRV)return schoolViewSrv();scope=null;hdr();loadU();if(!SC){dash();return}const names=Object.keys(SC.members),pend=names.filter(n=>SC.members[n].st==='pending'),ok=names.filter(n=>SC.members[n].st!=='pending'),live=Object.entries(hubSess);
 app.innerHTML=`<div class="c" id="schoolview"><div class="r"><button class="g" onclick="dash()">← Back</button><h2 class="f">${esc(SC.name)}</h2></div>
 <div class="mu">School code (give this to teachers)</div><div class="code" style="color:var(--board)">${SC.id}</div><div class="mu">${esc(hubErr||(hub&&hub.open?'Server online':'Starting…'))}</div>
 <p class="mu">Teachers connect to this computer. Their lessons are stored here and live lessons run here, so keep Lumo open and this computer online while teaching.</p>
@@ -411,7 +411,7 @@ function lesAct(k,j,a){const n=Object.keys(SC.members)[k],l=SC.lessons[n]||(SC.l
  if(a==='del'){if(confirm('Delete this lesson?')){l.splice(j,1);saveSC();schoolView()}return}
  scope={t:'mgr',u:n};lessons=l;a==='edit'?edit(j):host(j)}
 function liveEnd(k){const n=Object.keys(hubSess)[k];if(n){hubSess[n].end();delete hubSess[n];schoolView()}}
-function back(){scope?.t==='mgr'?schoolView():dash()}
+function back(){scope?.t==='mgr'||scope?.t==='smgr'?schoolView():dash()}
 async function listSchool(on){try{if(on){SC.token=SC.token||crypto.randomUUID();const r=await fetch(DIR+'/schools',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:SC.id,name:SC.name,city:SC.city,token:SC.token})});if(!r.ok)throw Error('HTTP '+r.status)}
  else await fetch(DIR+'/schools?id='+SC.id+'&token='+SC.token,{method:'DELETE'});SC.listed=on;saveSC()}catch(e){alert('Could not update school search: '+e.message)}schoolView()}
 async function pauth(){const sn=$('#psn').value.trim(),city=$('#psc').value.trim(),u=$('#pu').value.trim(),p=$('#pp').value,e=$('#pe');
@@ -419,9 +419,90 @@ async function pauth(){const sn=$('#psn').value.trim(),city=$('#psc').value.trim
  const us=ls('lc_users',{});if(us[u]){e.textContent='Username taken.';return}
  const sa=crypto.randomUUID(),id=Array.from(crypto.getRandomValues(new Uint8Array(6)),b=>'ABCDEFGHJKMNPQRSTUVWXYZ23456789'[b%31]).join('');
  us[u]={s:sa,h:await hash(p,sa),role:'principal'};sv('lc_users',us);sv('lc_school_'+u,{id,name:sn.slice(0,60),city:city.slice(0,40),members:{},lessons:{},listed:false});user=u;sv('lc_session',u);dash()}
-function banner(){const pend=SC?Object.values(SC.members).filter(m=>m.st==='pending').length:0;
+function banner(){if(SRV)return SRV.role==='principal'?`<div class="c r"><div class="f"><b>${esc(SRV.school.name)}</b><div class="mu">School code ${esc(SRV.school.id)}</div></div><button class="pri" onclick="schoolView()">Manage school</button></div>`:`<div class="c mu">Signed in to ${esc(SRV.school.name)}. Your lessons are saved on the Lumo server.</div>`;const pend=SC?Object.values(SC.members).filter(m=>m.st==='pending').length:0;
  if(SC&&role==='principal')return`<div class="c r"><div class="f"><b>${esc(SC.name)}</b><div class="mu">School code ${SC.id}. Keep Lumo open so teachers can connect.</div></div><button class="pri" onclick="schoolView()">Manage school${pend?` (${pend} waiting)`:''}</button></div>`;
  if(scope?.t==='remote')return`<div class="c mu">Signed in to ${esc(sch.name)}. Your lessons are stored on the school computer.</div>`;return''}
+/* ---------- Lumo server (Cloudflare Worker + D1) ---------- */
+const WORKER='https://lumo-relay.a765browne.workers.dev';/* your Lumo Worker address, no trailing slash. See README. */
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+let SRV=null,srvHost=null,srvStu=null,saTimer=null,SA=null;
+async function api(m,path,b){let r;
+ try{r=await fetch(WORKER+path,{method:m,headers:{...(m==='GET'?{}:{'Content-Type':'application/json'}),...(SRV?{Authorization:'Bearer '+SRV.tok}:{})},body:m==='GET'?undefined:JSON.stringify(b||{})})}
+ catch{throw Error('Cannot reach the Lumo server. Check the address in index.html and that the Worker is deployed.')}
+ const j=await r.json().catch(()=>({}));
+ if(!r.ok){if(r.status===401&&SRV&&!path.startsWith('/api/login')){srvClear();alert(j.error||'Please log in again.');user=null;scope=null;authView()}throw Error(j.error||'Server error ('+r.status+')')}
+ return j}
+function srvSet(j){SRV={tok:j.tok||SRV?.tok,u:j.u,role:j.role,school:j.school};sv('lc_srv',SRV);user=j.u;scope={t:'srv'};lessons=j.lessons||[]}
+function srvClear(){SRV=null;srvHost=null;srvStu=null;clearInterval(saTimer);localStorage.removeItem('lc_srv')}
+function srvAuthView(){app.innerHTML=`<section class="hero"><h1>Join your class</h1><p class="mu">Enter the code shown on your teacher's screen.</p><div class="r"><input class="codein" id="jc" placeholder="CODE" maxlength="5" aria-label="Lesson code"><input class="f" id="jn" placeholder="Your name" aria-label="Your name"><button class="pri" onclick="join()">Join lesson</button></div><div class="err" id="je"></div><button class="g" onclick="connCheck()">Test my connection</button><div class="mu" id="cc" style="margin-top:8px"></div></section>
+<section class="c tch"><h2>Teachers</h2><p class="mu">Log in to your school, or ask to join it. Your principal accepts new teachers.</p>
+<div class="r"><input class="f" id="sq" placeholder="Search for your school by name" aria-label="Search schools"><button onclick="sSearch()">Search</button></div><div id="sres"></div>
+<div class="r"><input class="f" id="ssc" placeholder="School code" maxlength="6" aria-label="School code" style="text-transform:uppercase"><input class="f" id="su2" placeholder="Username" aria-label="Username"><input class="f" id="sp2" type="password" placeholder="Password (6+ characters)" aria-label="Password"></div>
+<button class="pri" onclick="sLogin()">Log in</button><button class="g" onclick="sJoin()">Request to join</button><div class="err" id="se"></div></section>
+<details class="c"><summary><b>Principals: create a school</b></summary><p class="mu">You manage teacher accounts, lessons and the school AI. Everything is stored on the Lumo server, so no computer has to stay on.</p>
+<div class="r"><input class="f" id="psn" placeholder="School name" aria-label="School name"><input class="f" id="psc" placeholder="City (optional)" aria-label="City"></div><div class="r"><input class="f" id="pu" placeholder="Your username" aria-label="Principal username"><input class="f" id="pp" type="password" placeholder="Password (6+ characters)" aria-label="Password"></div>
+<button class="pri" onclick="sCreate()">Create school</button><div class="err" id="pe" style="color:var(--bad)"></div></details>`;
+ const jp=new URLSearchParams(location.search).get('join');if(jp)$('#jc').value=jp.toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,5)}
+async function sSearch(){const o=$('#sres');o.textContent='Searching…';
+ try{const j=await api('GET','/api/schools?q='+encodeURIComponent($('#sq').value.trim()));
+  o.innerHTML=(j.schools||[]).filter(x=>/^[A-Z0-9]{6}$/.test(x.id)).map(x=>`<div class="tr"><div class="f"><b>${esc(x.name)}</b><div class="mu">${esc(x.city||'')}</div></div><button class="pri" onclick="$('#ssc').value='${x.id}';$('#su2').focus()">Select</button></div>`).join('')||'<p class="mu">No schools found. Ask your principal for the school code.</p>'}
+ catch(e){o.textContent=e.message}}
+async function sLogin(){const e=$('#se');e.textContent='';try{srvSet(await api('POST','/api/login',{school:$('#ssc').value.trim(),u:$('#su2').value.trim(),p:$('#sp2').value}));dash()}catch(x){e.textContent=x.message}}
+async function sJoin(){const e=$('#se');e.textContent='';try{const j=await api('POST','/api/join',{school:$('#ssc').value.trim(),u:$('#su2').value.trim(),p:$('#sp2').value});e.textContent=j.msg}catch(x){e.textContent=x.message}}
+async function sCreate(){const e=$('#pe');e.textContent='';try{srvSet(await api('POST','/api/school/create',{name:$('#psn').value,city:$('#psc').value,u:$('#pu').value,p:$('#pp').value}));dash()}catch(x){e.textContent=x.message}}
+async function connCheckSrv(){const o=$('#cc'),L=[],add=t=>{L.push(t);o.innerHTML=L.map(x=>`<div>${esc(x)}</div>`).join('')};add('Connection service: Lumo server.');
+ try{await api('GET','/api/ping');add('Server reachable.')}catch(e){add('Problem: '+e.message);return}
+ try{await api('GET','/api/school/info?id=AAAAAA');add('Database connected.')}catch(e){add(/No school/.test(e.message)?'Database connected. Joining should work from this device.':'Problem: '+e.message)}}
+/* students */
+async function sJoinPlay(){const code=$('#jc').value.toUpperCase().replace(/[^A-Z0-9]/g,''),name=$('#jn').value.trim(),e=$('#je');
+ if(!code||!name){e.textContent='Enter the code and your name.';return}e.textContent='Connecting…';
+ try{const j=await api('POST','/api/play/join',{code,name}),S=srvStu={code,pid:j.pid,ver:j.state.ver};
+  conn={send:m=>{if(m.t==='ans')api('POST','/api/play/answer',{code,pid:S.pid,a:m.a}).then(s=>{S.ver=s.ver;sview(s)}).catch(x=>hint(x.message));else if(m.t==='sug')api('POST','/api/play/suggest',{code,pid:S.pid,x:m.x}).catch(()=>{})}};
+  sview(j.state);stuLoop(S)}catch(x){e.textContent=x.message}}
+async function stuLoop(S){while(srvStu===S){try{const r=await api('GET',`/api/play/state?code=${S.code}&pid=${S.pid}&since=${S.ver}`);if(srvStu!==S)return;
+  if(r.ended){srvStu=null;app.innerHTML='<div class="c"><h2>Lesson ended</h2><button onclick="location.reload()">Back</button></div>';return}
+  if(!r.same){S.ver=r.ver;sview(r)}}catch(e){await sleep(2500)}}}
+/* hosting */
+async function sHost(i){const l=lessons[i];hosting=true;app.innerHTML='<div class="c">Starting the lesson…</div>';
+ try{const j=await api('POST','/api/host',{lesson:l}),H0=srvHost={code:j.code,hk:j.hk,ver:-1,S:null};hostLoop(H0)}
+ catch(e){hosting=false;app.innerHTML=`<div class="c"><p>${esc(e.message)}</p><button onclick="endHost()">Back</button></div>`}}
+async function hostLoop(H0){while(srvHost===H0){try{const r=await api('GET',`/api/host/state?code=${H0.code}&hk=${H0.hk}&since=${H0.ver}`);if(srvHost!==H0)return;
+  if(r.ended){srvHost=null;hosting=false;present(false);alert('This lesson has ended.');scope?.t==='smgr'?schoolView():dash();return}
+  if(!r.same){H0.ver=r.ver;H0.S=r;hview(r)}}catch(e){if(srvHost!==H0)return;if(H0.S)hview({...H0.S,err:e.message});await sleep(3000)}}}
+async function sCmd(a,v){const H0=srvHost;if(!H0)return;try{const r=await api('POST','/api/host/cmd',{code:H0.code,hk:H0.hk,a,v});if(r.ended||srvHost!==H0)return;H0.ver=r.ver;H0.S=r;hview(r)}catch(e){hint(e.message)}}
+/* principal */
+async function schoolViewSrv(quiet){scope={t:'srv'};hdr();if(!quiet)app.innerHTML='<div class="c mu">Loading…</div>';
+ let A;try{A=await api('GET','/api/admin')}catch(e){app.innerHTML=`<div class="c"><p>${esc(e.message)}</p><button onclick="dash()">Back</button></div>`;return}
+ SA=A;lessons=A.mine;const s=A.school,a=s.ai,ms=A.members,pend=ms.filter(m=>m.st==='pending'),ok=ms.filter(m=>m.st!=='pending');
+ app.innerHTML=`<div class="c" id="schoolview"><div class="r"><button class="g" onclick="dash()">← Back</button><h2 class="f">${esc(s.name)}</h2></div>
+<div class="mu">School code (give this to teachers)</div><div class="code" style="color:var(--board)">${esc(s.id)}</div>
+<p class="mu">Teachers, lessons and live lessons are stored on the Lumo server, so no computer needs to stay on.</p>
+<label class="t"><input type="checkbox" ${s.listed?'checked':''} onchange="sList(this.checked)">Show in school search</label></div>
+<div class="c"><b>School AI</b><p class="mu">Set one API key for the whole school. It stays on the server, and teachers never see it.</p>
+<label class="t"><input type="checkbox" id="sai_on" ${a.on?'checked':''}>Let teachers use the school AI</label>
+<label class="fld">Provider<select onchange="sAiProv(this.value)">${Object.entries(PROV).map(([k,v])=>`<option value="${k}" ${k===a.prov?'selected':''}>${v.n}</option>`).join('')}</select></label>
+${a.prov==='builtin'?'<p class="mu">Uses the shared proxy.</p>':`<label class="fld">API key<input type="password" id="sai_k" autocomplete="off" placeholder="${a.has[a.prov]?'A key is saved. Paste a new one to replace it.':'Paste your API key'}"></label><label class="fld">Model<input id="sai_m" value="${esc(a.model)}"></label>`}
+<label class="fld">Daily limit per teacher<input type="number" id="sai_c" min="1" value="${a.cap}"></label>
+<button class="pri" onclick="sAiSave()">Save</button><button class="g" onclick="sAiTest()">Test</button><p class="mu" id="schmsg"></p></div>
+<div class="c"><b>Join requests</b>${pend.map(m=>`<div class="tr"><b class="f">${esc(m.u)}</b><button class="pri" onclick="sMem(${ms.indexOf(m)},'ok')">Accept</button><button class="d" onclick="sMem(${ms.indexOf(m)},'deny')">Decline</button></div>`).join('')||'<p class="mu">No requests waiting.</p>'}</div>
+<div class="c"><b>Teachers</b>${ok.map(m=>{const k=ms.indexOf(m);return`<div class="tr"><div class="f"><b>${esc(m.u)}</b> <span class="badge">${m.st==='off'?'Suspended':'Active'}</span><div class="mu">${m.n} lessons</div></div><button class="g" onclick="sMem(${k},'${m.st==='off'?'on':'off'}')">${m.st==='off'?'Reinstate':'Suspend'}</button><button class="g" onclick="sMem(${k},'pw')">Reset password</button><button class="d" onclick="sMem(${k},'rm')">Remove</button></div>`}).join('')||'<p class="mu">No teachers yet.</p>'}</div>
+<div class="c"><b>All lessons</b>${ok.map(m=>{const k=ms.indexOf(m);return(A.lessons[m.u]||[]).map((l,j)=>`<div class="tr"><div class="f"><b>${esc(l.title)}</b><div class="mu">${esc(m.u)}, ${l.n} items</div></div><button class="g" onclick="sLes(${k},${j},'edit')">Edit</button><button class="pri" onclick="sLes(${k},${j},'host')">Host</button><button class="d" onclick="sLes(${k},${j},'del')">Delete</button></div>`).join('')}).join('')||'<p class="mu">No lessons yet.</p>'}</div>
+<div class="c"><b>Live now</b>${A.live.map((x,k)=>`<div class="tr"><div class="f"><b>${esc(x.title)}</b><div class="mu">${esc(x.owner||'')}, code ${esc(x.code)}, ${x.n} students</div></div><button class="d" onclick="sEnd(${k})">End</button></div>`).join('')||'<p class="mu">No live lessons.</p>'}</div>`;
+ clearInterval(saTimer);saTimer=setInterval(()=>{if(!$('#schoolview')){clearInterval(saTimer);return}if(!/INPUT|SELECT/.test(document.activeElement?.tagName))schoolViewSrv(true)},10000)}
+async function sMem(k,a){const m=SA.members[k];if(!m)return;let pw;
+ if(a==='rm'&&!confirm('Remove '+m.u+' and delete their lessons?'))return;
+ if(a==='pw'){pw=prompt('New password for '+m.u+' (6+ characters)');if(!pw)return}
+ try{await api('POST','/api/admin/member',{u:m.u,a,pw})}catch(e){alert(e.message)}schoolViewSrv()}
+async function sLes(k,j,a){const m=SA.members[k];if(!m)return;
+ try{const r=await api('GET','/api/admin/lessons?u='+encodeURIComponent(m.u));
+  if(a==='del'){if(!confirm('Delete this lesson?'))return;r.lessons.splice(j,1);await api('PUT','/api/admin/lessons?u='+encodeURIComponent(m.u),{lessons:r.lessons});schoolViewSrv();return}
+  scope={t:'smgr',u:m.u};lessons=r.lessons;a==='edit'?edit(j):host(j)}catch(e){alert(e.message)}}
+async function sEnd(k){const x=SA.live[k];if(!x)return;try{await api('POST','/api/admin/end',{code:x.code})}catch(e){alert(e.message)}schoolViewSrv()}
+async function sList(on){try{await api('POST','/api/admin/list',{listed:on})}catch(e){alert(e.message)}schoolViewSrv()}
+async function sAiProv(v){try{await api('POST','/api/admin/ai',{prov:v})}catch(e){alert(e.message)}schoolViewSrv()}
+async function sAiSave(){const m=$('#schmsg'),b={on:$('#sai_on').checked,cap:+$('#sai_c').value||200};if($('#sai_m'))b.model=$('#sai_m').value;if($('#sai_k')&&$('#sai_k').value.trim())b.key=$('#sai_k').value;
+ try{await api('POST','/api/admin/ai',b);SRV.school.ai=b.on;sv('lc_srv',SRV);if($('#sai_k'))$('#sai_k').value='';m.textContent='Saved.'}catch(e){m.textContent='Could not save: '+e.message}}
+async function sAiTest(){const m=$('#schmsg');m.textContent='Testing…';try{const r=await api('POST','/api/ai',{sys:'Reply with the single word: ok',p:'ping',h:[]});m.textContent='Connected. The model replied: '+String(r.text).slice(0,60)}catch(e){m.textContent='Failed: '+e.message}}
 /* ---------- presenting ---------- */
 let hosting=false;
 function hint(t){document.querySelector('.hint')?.remove();const d=document.createElement('div');d.className='hint';d.textContent=t;document.body.appendChild(d);setTimeout(()=>{d.style.opacity=0;setTimeout(()=>d.remove(),700)},4500)}
@@ -432,7 +513,7 @@ document.addEventListener('keydown',e=>{if(!hosting||e.ctrlKey||e.metaKey||e.alt
  if(k===' '||k==='ArrowRight'||k==='PageDown')go(1);else if(k==='ArrowLeft'||k==='PageUp')go(-1);else if(k==='r'||k==='R')rev();else if(k==='f'||k==='F')toggleFull();else if(k==='Escape'&&document.body.classList.contains('present'))present(false);else return;
  e.preventDefault();if(document.activeElement?.tagName==='BUTTON')document.activeElement.blur()});
 /* ---------- student ---------- */
-function join(){const code=$('#jc').value.toUpperCase().replace(/[^A-Z0-9]/g,''),name=$('#jn').value.trim(),e=$('#je');
+function join(){if(WORKER)return sJoinPlay();const code=$('#jc').value.toUpperCase().replace(/[^A-Z0-9]/g,''),name=$('#jn').value.trim(),e=$('#je');
 if(!code||!name){e.textContent='Enter the code and your name.';return}e.textContent='Connecting…';
 const fail=t=>{e.textContent=t};try{peer&&peer.destroy()}catch{}
 peer=new Peer();peer.on('open',()=>{conn=peer.connect('hrslesson-'+code,{reliable:true});

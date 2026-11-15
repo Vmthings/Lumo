@@ -76,7 +76,7 @@ body.present,body.present *{cursor:none!important}
 </style></head><body>
 <header><b class="logo"><i></i>Lumo</b><span id="hr"></span></header><main id="app"></main>
 <script>
-const PROXY='https://groq-proxy.a765browne.workers.dev/',MODEL='openai/gpt-oss-120b';
+const PROXY='https://groq-proxy.a765browne.workers.dev/',MODEL='openai/gpt-oss-120b',RELAY='';/* optional: URL of your Lumo relay Worker, see README */
 const $=s=>document.querySelector(s),esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const ls=(k,d)=>{try{return JSON.parse(localStorage.getItem(k))??d}catch{return d}},sv=(k,v)=>localStorage.setItem(k,JSON.stringify(v));
 let cfg={ai:true},fs=null,sel='/memory.md',user=ls('lc_session',null),lessons=[],L=null,peer=null,conns={},players={},H=null,sugs=[],aiSugs=[],conn=null;
@@ -87,7 +87,7 @@ function hdr(){document.body.dataset.m='app';$('#hr').innerHTML=user?`${esc(user
 function logout(){stopHost();stopHub();closeRemote();scope=null;SC=null;role=null;user=null;localStorage.removeItem('lc_session');home()}
 function home(){hdr();user?dash():authView()}
 /* ---------- auth + join ---------- */
-function authView(){app.innerHTML=`<section class="hero"><h1>Join your class</h1><p class="mu">Enter the code shown on your teacher's screen.</p><div class="r"><input class="codein" id="jc" placeholder="CODE" maxlength="5" aria-label="Lesson code"><input class="f" id="jn" placeholder="Your name" aria-label="Your name"><button class="pri" onclick="join()">Join lesson</button></div><div class="err" id="je"></div></section>
+function authView(){app.innerHTML=`<section class="hero"><h1>Join your class</h1><p class="mu">Enter the code shown on your teacher's screen.</p><div class="r"><input class="codein" id="jc" placeholder="CODE" maxlength="5" aria-label="Lesson code"><input class="f" id="jn" placeholder="Your name" aria-label="Your name"><button class="pri" onclick="join()">Join lesson</button></div><div class="err" id="je"></div><button class="g" onclick="connCheck()">Test my connection</button><div class="mu" id="cc" style="margin-top:8px"></div></section>
 <section class="c tch"><h2>Teachers</h2><p class="mu">Log in to create and host lessons. Accounts are stored in this browser.</p>
 <div class="r"><input class="f" id="au" placeholder="Username" aria-label="Username"><input class="f" id="ap" type="password" placeholder="Password (6+ characters)" aria-label="Password"></div><button class="pri" onclick="auth(0)">Log in</button><button class="g" onclick="auth(1)">Create account</button><div class="err" id="ae"></div></section>
 <details class="c"><summary><b>Join a school as a teacher</b></summary><p class="mu">Your principal manages your account, and your lessons are stored on the school's computer.</p>
@@ -266,6 +266,40 @@ ${x.type==='q'?`<input value="${esc(x.q)}" placeholder="Question" oninput="L.ite
 function add(t){L.items.push(t==='q'?{type:'q',q:'',opts:['','','',''],ans:0}:{type:'slide',title:'',body:''});save();edit(cur)}
 function rm(j){L.items.splice(j,1);save();edit(cur)}
 function mv(j,d){const k=j+d;if(k<0||k>=L.items.length)return;[L.items[j],L.items[k]]=[L.items[k],L.items[j]];save();edit(cur)}
+/* ---------- connections: relay (WebSocket) or PeerJS cloud ---------- */
+class RConn{constructor(p,peer,cid,open){this.p=p;this.peer=peer;this.cid=cid;this.open=open;this.h={}}
+ on(e,f){(this.h[e]=this.h[e]||[]).push(f);return this}emit(e,...a){(this.h[e]||[]).forEach(f=>f(...a))}
+ send(m){if(this.open)this.p._tx({t:'d',dst:this.peer,cid:this.cid,m})}
+ close(){if(this.open){this.open=false;this.p._tx({t:'x',dst:this.peer,cid:this.cid});delete this.p.cs[this.peer+'|'+this.cid];this.emit('close')}}}
+class RPeer{constructor(id){this.id=id||null;this.key=crypto.randomUUID();this.h={};this.cs={};this.destroyed=false;this.disconnected=false;this.opened=false;this._open();
+  this.iv=setInterval(()=>{if(this.ws&&this.ws.readyState===1)this.ws.send('ping')},25000)}
+ on(e,f){(this.h[e]=this.h[e]||[]).push(f);return this}emit(e,...a){(this.h[e]||[]).forEach(f=>f(...a))}
+ _tx(m){if(this.ws&&this.ws.readyState===1)this.ws.send(JSON.stringify(m))}
+ _open(){const ws=this.ws=new WebSocket(RELAY.replace(/^http/,'ws').replace(/\/$/,'')+'/ws');let up=false;
+  ws.onopen=()=>{up=true;this.disconnected=false;ws.send(JSON.stringify({t:'reg',id:this.id,key:this.key}))};
+  ws.onmessage=ev=>{if(ev.data==='pong')return;let m;try{m=JSON.parse(ev.data)}catch{return}
+   if(m.t==='open'){this.id=m.id;this.opened=true;this.emit('open',m.id)}
+   else if(m.t==='err'){this.emit('error',{type:m.e,dst:m.dst})}
+   else if(m.t==='c'){const c=new RConn(this,m.src,m.cid,true);this.cs[m.src+'|'+m.cid]=c;this._tx({t:'ca',dst:m.src,cid:m.cid});this.emit('connection',c)}
+   else if(m.t==='gone'){for(const k in this.cs){const c=this.cs[k];if(c.peer===m.id){c.open=false;delete this.cs[k];c.emit('close')}}}
+   else{const k=m.src+'|'+m.cid,c=this.cs[k];if(!c)return;if(m.t==='ca'){c.open=true;c.emit('open')}else if(m.t==='d')c.emit('data',m.m);else if(m.t==='x'){c.open=false;delete this.cs[k];c.emit('close')}}};
+  ws.onclose=()=>{if(this.ws!==ws||this.destroyed)return;if(!up&&!this.opened)this.emit('error',{type:'network'});this.disconnected=true;Object.values(this.cs).forEach(c=>{c.open=false;c.emit('close')});this.cs={};this.emit('disconnected')}}
+ connect(id){const c=new RConn(this,id,crypto.randomUUID().slice(0,8),false);this.cs[id+'|'+c.cid]=c;this._tx({t:'c',dst:id,cid:c.cid});return c}
+ reconnect(){if(!this.destroyed&&this.disconnected)this._open()}
+ destroy(){this.destroyed=true;clearInterval(this.iv);try{this.ws.close()}catch{}}}
+if(RELAY)window.Peer=RPeer;
+function tryPeer(id){return new Promise(res=>{let p;try{p=new Peer(id)}catch(e){return res({err:e.message})}const to=setTimeout(()=>res({p,err:'timeout'}),8000);p.on('open',()=>{clearTimeout(to);res({p})});p.on('error',e=>{clearTimeout(to);res({p,err:e.type})})})}
+async function connCheck(){const o=$('#cc'),L=[],add=t=>{L.push(t);o.innerHTML=L.map(x=>`<div>${esc(x)}</div>`).join('')};
+ add(RELAY?'Connection service: Lumo relay.':'Connection service: free PeerJS cloud.');
+ if(typeof Peer==='undefined'){add('Problem: the connection library did not load. It may be blocked on this network.');return}
+ add('Connection library loaded.');
+ const a=await tryPeer('chk'+mkcode());
+ if(a.err){add('Problem: cannot reach the connection service ('+a.err+'). '+(RELAY?'Check the relay address and that the Worker is deployed.':'It may be down or blocked on this network. Setting up the Lumo relay (see the README) fixes this.'));try{a.p&&a.p.destroy()}catch{}return}
+ add('Connection service reachable.');
+ const b=await tryPeer(null);if(b.err){add('Problem: a second test connection failed ('+b.err+').');a.p.destroy();return}
+ const ok=await new Promise(res=>{const to=setTimeout(()=>res(false),10000);a.p.on('connection',c=>c.on('data',m=>{if(m==='hi'){clearTimeout(to);res(true)}}));const c=b.p.connect(a.p.id);c.on('open',()=>c.send('hi'))});
+ add(ok?'Two test connections reached each other. Joining should work from this device.':'Problem: connections cannot be set up on this network (a firewall may block peer-to-peer traffic). Setting up the Lumo relay (see the README) fixes this.');
+ a.p.destroy();b.p.destroy()}
 /* ---------- sessions (live lessons) ---------- */
 let sess=null,rs=null,rc=null,rpeer=null,sch=null,scope=null,rid=0,rpend={};
 function seq(l){const it=l.items;if(l.split===false)return it;const sl=it.filter(x=>x.type!=='q'),qs=it.filter(x=>x.type==='q');return sl.length&&qs.length?[...sl,{type:'slide',title:'Quiz time',body:'The lesson is finished. Get ready for the questions.'},...qs]:it}
@@ -348,7 +382,7 @@ function startHub(){if(hub||!SC)return;hub=new Peer('lumo-s-'+SC.id);hub.on('ope
   else if(m.t==='end'){hubSess[u]?.end();delete hubSess[u];refreshSchool()}})})}
 function stopHub(){clearInterval(hubIv);Object.values(hubSess).forEach(x=>x.end());hubSess={};try{hub&&hub.destroy()}catch{}hub=null;hubErr='';hubCs.clear()}
 function kick(n){hubSess[n]?.end();delete hubSess[n];hubCs.forEach(c=>{if(c.u===n)c.close()})}
-function schoolView(){scope=null;hdr();loadU();const names=Object.keys(SC.members),pend=names.filter(n=>SC.members[n].st==='pending'),ok=names.filter(n=>SC.members[n].st!=='pending'),live=Object.entries(hubSess);
+function schoolView(){scope=null;hdr();loadU();if(!SC){dash();return}const names=Object.keys(SC.members),pend=names.filter(n=>SC.members[n].st==='pending'),ok=names.filter(n=>SC.members[n].st!=='pending'),live=Object.entries(hubSess);
 app.innerHTML=`<div class="c" id="schoolview"><div class="r"><button class="g" onclick="dash()">← Back</button><h2 class="f">${esc(SC.name)}</h2></div>
 <div class="mu">School code (give this to teachers)</div><div class="code" style="color:var(--board)">${SC.id}</div><div class="mu">${esc(hubErr||(hub&&hub.open?'Server online':'Starting…'))}</div>
 <p class="mu">Teachers connect to this computer. Their lessons are stored here and live lessons run here, so keep Lumo open and this computer online while teaching.</p>

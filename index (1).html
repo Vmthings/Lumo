@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Lumo</title>
+<script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;800&family=Figtree:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{--board:#1d3b36;--board2:#15302c;--chalk:#f5f3ea;--yel:#f4c542;--paper:#eef2ef;--card:#fff;--ink:#14201e;--mu:#5d6d69;--line:#cfd9d4;--ok:#2e9e6b;--bad:#d6483f;--edge:#3b5c55}
+*{box-sizing:border-box}
+body{margin:0;font:16px/1.5 Figtree,system-ui,sans-serif;background:var(--paper);color:var(--ink)}
+body[data-m=stage]{background:var(--board2);color:var(--chalk)}
+h1,h2,.logo,.code,.big h2,.item b.f{font-family:'Bricolage Grotesque',Figtree,sans-serif;letter-spacing:-.02em}
+h1{font-size:clamp(32px,6vw,52px);line-height:1.05;margin:0 0 8px}h2{margin:0 0 6px;font-size:22px}
+header{display:flex;justify-content:space-between;align-items:center;padding:12px 22px;background:var(--board);color:var(--chalk)}
+.logo{display:flex;align-items:center;gap:10px;font-size:20px;font-weight:800}
+.logo i{width:28px;height:21px;border:2px solid var(--yel);border-radius:3px;position:relative}
+.logo i:after{content:"";position:absolute;left:4px;right:4px;top:5px;height:2px;background:var(--yel);box-shadow:0 5px 0 var(--yel)}
+main{max-width:980px;margin:24px auto;padding:0 16px}
+.c{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:18px;margin-bottom:14px}
+input,textarea{width:100%;padding:10px 12px;border:1.5px solid var(--line);border-radius:8px;background:#fff;color:var(--ink);font:inherit;margin:4px 0}
+input[type=radio],input[type=checkbox]{width:auto;margin:0;accent-color:var(--board)}
+textarea{min-height:90px;resize:vertical}
+:focus-visible{outline:3px solid var(--yel);outline-offset:2px}
+button{background:var(--board);color:var(--chalk);border:0;border-radius:8px;padding:10px 16px;font:inherit;font-weight:600;cursor:pointer;margin:2px;transition:transform .1s,background .15s}
+button:hover{background:#2a554d}button:active{transform:translateY(1px)}
+.pri{background:var(--yel);color:#2b2200}.pri:hover{background:#ffd75e}
+button.g{background:transparent;color:inherit;border:1.5px solid currentColor;opacity:.85}button.g:hover{background:rgba(127,127,127,.14)}
+button.d{background:transparent;color:var(--bad);border:1.5px solid var(--bad)}button.d:hover{background:rgba(214,72,63,.1)}
+button:disabled{opacity:.45;cursor:not-allowed}
+.r{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.r>*{flex:0 0 auto}.r .f{flex:1;min-width:140px}
+.mu{color:var(--mu);font-size:14px}body[data-m=stage] .mu{color:#b8c9c3}
+label.t{display:inline-flex;gap:8px;align-items:center;padding:6px 12px;border:1.5px solid var(--line);border-radius:999px;cursor:pointer;margin:3px 6px 3px 0;font-weight:600;font-size:14px}
+label.t:has(input:checked){background:var(--board);color:var(--chalk);border-color:var(--board)}
+body[data-m=stage] label.t{border-color:var(--edge)}
+body[data-m=stage] label.t:has(input:checked){background:var(--yel);color:#2b2200;border-color:var(--yel)}
+body[data-m=stage] input{background:var(--board2);color:var(--chalk);border-color:var(--edge)}
+.hero{background:var(--board);color:var(--chalk);border-radius:14px;padding:clamp(22px,5vw,44px);margin-bottom:16px;box-shadow:inset 0 0 0 6px var(--board),inset 0 0 0 8px var(--edge)}
+.hero .mu{color:#b8c9c3;margin:0 0 18px}
+.hero input{background:var(--board2);color:var(--chalk);border-color:var(--edge)}
+.hero input::placeholder{color:#7f9a93}
+.codein{font:800 clamp(30px,7vw,46px) 'Bricolage Grotesque',sans-serif;letter-spacing:.3em;text-align:center;text-transform:uppercase;color:var(--yel)!important;border:2px dashed #5b7c75!important;max-width:300px}
+.err{min-height:22px;font-size:14px;color:#ffb4ab}.tch .err{color:var(--bad)}
+.bar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px}.bar .f{flex:1}
+.join{flex:1;text-align:center;color:#b8c9c3}.code{font-size:38px;font-weight:800;color:var(--yel);letter-spacing:.2em;margin-left:10px}
+.pts{background:var(--yel);color:#2b2200;font-weight:800;padding:4px 12px;border-radius:999px}
+.prog{height:5px;background:#2a4a44;border-radius:3px;overflow:hidden;margin-bottom:14px}.prog i{display:block;height:100%;background:var(--yel);transition:width .3s}
+.grid{display:grid;grid-template-columns:1fr 280px;gap:16px;align-items:start}@media(max-width:760px){.grid{grid-template-columns:1fr}}
+.board{background:var(--board);color:var(--chalk);border:1px solid var(--edge);border-radius:14px;padding:clamp(18px,4vw,36px);min-height:240px;margin-bottom:12px}
+.big h2{font-size:clamp(26px,4.5vw,40px);line-height:1.15;margin:0 0 14px;font-weight:800}
+.big p{font-size:clamp(18px,2.4vw,23px);white-space:pre-wrap;max-width:62ch;margin:0}
+.big p.mu{font-size:14px;margin-top:10px}.res{font-weight:600;margin-top:12px!important}
+.opt{display:flex;gap:12px;align-items:center;width:100%;text-align:left;background:#244a43;color:var(--chalk);border:2px solid transparent;padding:12px 14px;margin:8px 0;font-size:18px;border-radius:10px;transition:background .2s,border-color .2s}
+.opt:hover:not(:disabled){background:#2d5a52}
+.ab{flex:0 0 32px;height:32px;border-radius:6px;background:var(--chalk);color:var(--board);display:grid;place-items:center;font-weight:800}
+.opt.sel{border-color:var(--yel)}.opt.ok{background:#1f6b4b;border-color:#5fd39c}.opt.no{background:#7a2e2a;border-color:#ff8a80}
+.opt:disabled{cursor:default;opacity:1}.opt:disabled:not(.ok):not(.no):not(.sel){opacity:.55}
+.lb{background:var(--board);color:var(--chalk);border:1px solid var(--edge);border-radius:12px;padding:14px 16px;margin-bottom:12px}
+.lb>b{display:block;margin-bottom:6px}
+.lb .rk{display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid #2a4a44}
+.lb .rk:first-of-type{color:var(--yel);font-weight:800;font-size:18px}
+.sg{border-left:4px solid var(--yel);padding:2px 10px;margin:8px 0}
+.c.sg{border-left-color:var(--board)}
+.item{border-left:5px solid var(--board)}.item.q{border-left-color:var(--yel)}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.seg{display:inline-flex;border:1.5px solid var(--board);border-radius:8px;overflow:hidden}.seg button{margin:0;border-radius:0;background:transparent;color:var(--ink)}.seg button.on{background:var(--board);color:var(--chalk)}
+.msgs{max-height:360px;overflow:auto;padding:4px 2px;margin-bottom:8px}.m{padding:9px 12px;border-radius:10px;margin:6px 0;max-width:90%;white-space:pre-wrap}
+.m.u{background:var(--board);color:var(--chalk);margin-left:auto}.m.a{background:var(--paper);border:1px solid var(--line)}.m ol{margin:4px 0 8px 18px;padding:0}.m.a div{margin-top:8px}
+select{padding:10px;border:1.5px solid var(--line);border-radius:8px;background:#fff;color:var(--ink);font:inherit;max-width:100%}
+.fld{display:block;margin:12px 0;font-weight:600;font-size:14px}details.c summary{cursor:pointer}
+@media(prefers-reduced-motion:reduce){*{transition:none!important}}
+</style></head><body>
+<header><b class="logo"><i></i>Lumo</b><span id="hr"></span></header><main id="app"></main>
+<script>
+const PROXY='https://groq-proxy.a765browne.workers.dev/',MODEL='openai/gpt-oss-120b';
+const $=s=>document.querySelector(s),esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const ls=(k,d)=>{try{return JSON.parse(localStorage.getItem(k))??d}catch{return d}},sv=(k,v)=>localStorage.setItem(k,JSON.stringify(v));
+let cfg={ai:true},fs=null,sel='/memory.md',user=ls('lc_session',null),lessons=[],L=null,peer=null,conns={},players={},H=null,sugs=[],aiSugs=[],conn=null;
+const app=$('#app');
+async function hash(p,salt){const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(salt+p));return[...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('')}
+const save=()=>sv('lc_l_'+user,lessons);
+function hdr(){document.body.dataset.m='app';$('#hr').innerHTML=user?`${esc(user)} <button class="g" onclick="settings()">Settings</button><button class="g" onclick="logout()">Log out</button>`:''}
+function logout(){user=null;localStorage.removeItem('lc_session');stopHost();home()}
+function home(){hdr();user?dash():authView()}
+/* ---------- auth + join ---------- */
+function authView(){app.innerHTML=`<section class="hero"><h1>Join your class</h1><p class="mu">Enter the code shown on your teacher's screen.</p><div class="r"><input class="codein" id="jc" placeholder="CODE" maxlength="5" aria-label="Lesson code"><input class="f" id="jn" placeholder="Your name" aria-label="Your name"><button class="pri" onclick="join()">Join lesson</button></div><div class="err" id="je"></div></section>
+<section class="c tch"><h2>Teachers</h2><p class="mu">Log in to create and host lessons. Accounts are stored in this browser.</p>
+<div class="r"><input class="f" id="au" placeholder="Username" aria-label="Username"><input class="f" id="ap" type="password" placeholder="Password (6+ characters)" aria-label="Password"></div><button class="pri" onclick="auth(0)">Log in</button><button class="g" onclick="auth(1)">Create account</button><div class="err" id="ae"></div></section>`}
+async function auth(reg){const u=$('#au').value.trim(),p=$('#ap').value,us=ls('lc_users',{}),e=$('#ae');
+if(!u||p.length<6)return e.textContent='Enter a username and a 6+ character password.';
+if(reg){if(us[u])return e.textContent='Username taken.';const s=crypto.randomUUID();us[u]={s,h:await hash(p,s)};sv('lc_users',us)}
+else if(!us[u]||us[u].h!==await hash(p,us[u].s))return e.textContent='Wrong username or password.';
+user=u;sv('lc_session',u);dash()}
+/* ---------- dashboard ---------- */
+function dash(){hdr();loadU();lessons=ls('lc_l_'+user,[]);
+app.innerHTML=`<div class="c"><div class="r"><h2 class="f">Your lessons</h2><button class="pri" onclick="newL()">+ New lesson</button></div>${lessons.map((l,i)=>`<div class="r c"><div class="f"><b>${esc(l.title)}</b><div class="mu">${l.items.length} items</div></div><button onclick="edit(${i})">Edit</button><button class="pri" onclick="host(${i})">Host</button><button class="d" onclick="delL(${i})">Delete</button></div>`).join('')||'<p class="mu">No lessons yet. Create one by hand or let AI draft it.</p>'}</div>`}
+function newL(){lessons.push({title:'Untitled lesson',lb:false,quiz:true,items:[]});save();edit(lessons.length-1)}
+function delL(i){if(confirm('Delete this lesson?')){lessons.splice(i,1);save();dash()}}
+/* ---------- AI ---------- */
+async function ai(sys,prompt,web,hist){if(!cfg.ai)throw Error('AI is turned off in Settings');const t=await llm(sys,prompt,web,hist);
+const m=t.match(/\{[\s\S]*\}/);try{if(!m)throw 0;return JSON.parse(m[0])}catch{if(hist)return{reply:t||'(no response)',actions:[]};throw Error('AI did not return JSON')}}
+const SCHEMA='Respond with ONLY JSON: {"title":string,"items":[{"type":"slide","title":string,"body":string} or {"type":"q","q":string,"opts":[4 strings],"ans":0-3 index}]}.';
+async function gen(){const b=$('#gb'),topic=$('#gt').value.trim();if(!topic)return;b.disabled=true;b.textContent='Generating…';
+const web=$('#gw').checked,qz=L.quiz,n=$('#gn').value;
+try{const j=await ai('You are an expert teacher creating lessons. '+SCHEMA+(qz?' Add a quiz question after every 1-2 slides.':' Use only slide items, no questions.'),
+`Create a lesson on: ${topic}. Audience: ${$('#ga').value||'general'}. About ${n} slides.${web?' Search the web for accurate, current facts.':''}`,web);
+L.title=j.title||L.title;L.items=(j.items||[]).filter(x=>qz||x.type!=='q');save();edit(cur)}
+catch(e){alert('AI error: '+e.message);b.disabled=false;b.textContent='Generate with AI'}}
+async function suggest(){const b=$('#sb');b.disabled=true;b.textContent='Reviewing…';
+try{const j=await ai('You review lessons and suggest improvements. Respond with ONLY JSON: {"suggestions":[{"index":number,"reason":string,"item":<replacement item, same shape as the original>}]}. Max 5 suggestions.',JSON.stringify({title:L.title,items:L.items}),$('#gw').checked);
+aiSugs=j.suggestions||[];edit(cur)}catch(e){alert('AI error: '+e.message);b.disabled=false;b.textContent='✨ Suggest edits'}}
+function acc(k){const s=aiSugs[k];if(L.items[s.index])L.items[s.index]=s.item;aiSugs.splice(k,1);save();edit(cur)}
+function dis(k){aiSugs.splice(k,1);edit(cur)}
+/* ---------- AI chat (plan / agent) ---------- */
+let mode=ls('lc_mode','plan');
+const setMode=m=>{mode=m;sv('lc_mode',m);edit(cur)};
+const fix=x=>{if(!x||typeof x!=='object')return null;
+ if(x.type==='q'){if(!L.quiz)return null;const o=(Array.isArray(x.opts)?x.opts:[]).slice(0,4).map(String);while(o.length<4)o.push('');return{type:'q',q:String(x.q||''),opts:o,ans:Math.max(0,Math.min(3,+x.ans||0))}}
+ return{type:'slide',title:String(x.title||''),body:String(x.body||'')}};
+const nm=x=>x?.title||x?.q||'';
+const dsc=a=>a.type==='set_title'?`Rename the lesson to "${a.title}"`:a.type==='add'?`Add a ${a.item?.type==='q'?'question':'slide'} ${a.index?'at position '+a.index:'at the end'}: ${nm(a.item)}`:a.type==='update'?`Update item ${a.index}: ${nm(a.item)}`:a.type==='delete'?`Delete item ${a.index}`:a.type==='write_file'?`Write file ${a.path}`:a.type==='append_file'?`Add to file ${a.path}`:a.type==='delete_file'?`Delete file ${a.path}`:'Unknown step';
+function apply(acts){L.undo=JSON.stringify({title:L.title,items:L.items});const done=[];
+ for(const a of acts){const i=(+a.index||0)-1;
+  if(a.type==='set_title'&&a.title){L.title=String(a.title);done.push(dsc(a))}
+  else if(a.type==='add'){const it=fix(a.item);if(!it)continue;const at=a.index?Math.max(0,Math.min(L.items.length,i)):L.items.length;L.items.splice(at,0,it);done.push(dsc(a))}
+  else if(a.type==='update'&&L.items[i]){const it=fix(a.item);if(!it)continue;L.items[i]=it;done.push(dsc(a))}
+  else if(a.type==='delete'&&L.items[i]){L.items.splice(i,1);done.push(dsc(a))}
+  else if(['write_file','append_file','delete_file'].includes(a.type)){if(fileOp(a))done.push(dsc(a))}}
+ save();return done}
+const steps=l=>`<ol>${l.map(d=>`<li>${esc(d)}</li>`).join('')}</ol>`;
+function msgsHTML(){const ch=L.chat||[];if(!ch.length)return'<p class="mu">Ask a question, or describe a change like "add a quiz question about the water cycle".</p>';
+ return ch.map((m,k)=>m.r==='user'?`<div class="m u">${esc(m.t)}</div>`:`<div class="m a">${esc(m.t)}${m.used?.length?`<div class="mu">${m.used.map(x=>esc(x)).join('; ')}</div>`:''}${m.plan?`<div><b>Plan</b>${steps(m.plan.acts.map(dsc))}${m.plan.done===true?'<span class="mu">Applied</span>':m.plan.done?'<span class="mu">Discarded</span>':`<button class="pri" onclick="doPlan(${k})">Apply plan</button><button class="g" onclick="dropPlan(${k})">Discard</button>`}</div>`:''}${m.did?.length?`<div><b>Changes made</b>${steps(m.did)}</div>`:''}</div>`).join('')}
+function chatHTML(){L.chat=L.chat||[];return`<div class="c"><div class="r"><b class="f">AI assistant</b><div class="seg"><button class="${mode==='plan'?'on':''}" onclick="setMode('plan')">Plan</button><button class="${mode==='agent'?'on':''}" onclick="setMode('agent')">Agent</button></div></div>
+<p class="mu">${mode==='plan'?'Plan mode: the AI answers and proposes steps. Nothing changes until you press Apply.':'Agent mode: the AI edits the lesson directly. You can undo its last change.'}</p>
+<div class="msgs" id="msgs">${msgsHTML()}</div>
+<div class="r"><input class="f" id="ci" placeholder="Ask the AI or tell it what to change" onkeydown="if(event.key==='Enter')chat()"><button class="pri" id="cb" onclick="chat()">Send</button></div>
+<div class="r"><button class="g" onclick="undo()" ${L.undo?'':'disabled'}>Undo last AI change</button><button class="g" onclick="clr()">Clear history</button></div></div>`}
+function msgsView(){const b=$('#msgs');b.innerHTML=msgsHTML();b.scrollTop=b.scrollHeight}
+const FALLBACK='You are Lumo, a teaching assistant inside a lesson editor. Help teachers plan lessons, write clear slides and fair four-option quiz questions. Be concise and accurate.';
+const saveFs=()=>sv('lc_fs_'+user,fs),np=p=>'/'+String(p||'').replace(/^\/+/,'').slice(0,80);
+function loadU(){cfg=ls('lc_set_'+user,{ai:true});fs=ls('lc_fs_'+user,null)}
+async function skill(){try{const r=await fetch('SKILL.md',{cache:'no-cache'});if(r.ok)return await r.text()}catch{}return FALLBACK}
+async function ensureFs(){if(fs)return;fs={'/SKILL.md':await skill(),'/memory.md':'# Memory\n\nNotes the AI keeps about you and your classes.\n'};saveFs()}
+async function sysPrompt(){await ensureFs();return`${(fs['/SKILL.md']||FALLBACK).slice(0,7000)}
+
+## Output format (required)
+Respond with ONLY JSON: {"reply":string,"actions":[...]}. Use an empty actions array when no action is needed.
+Direct lesson edits: {"type":"set_title","title":string}, {"type":"add","index":optional position,"item":ITEM}, {"type":"update","index":number,"item":ITEM}, {"type":"delete","index":number}. ITEM is {"type":"slide","title":string,"body":string} or {"type":"q","q":string,"opts":[4 strings],"ans":0-3}. Item numbers start at 1. Steps run in order, so each index refers to the lesson as it is when that step runs.
+Virtual files: {"type":"list_files"}, {"type":"read_file","path":string}, {"type":"write_file","path":string,"content":string}, {"type":"append_file","path":string,"content":string}, {"type":"delete_file","path":string}. Reads run immediately and their results come back to you in the next message; then give your final answer.
+Memory: {"type":"remember","text":one short line} saves to /memory.md immediately.
+You may use direct lesson edits, virtual files or memory, whichever fits the job.
+${L.quiz?'':'Quiz questions are turned off for AI in this lesson, so use slides only. '}${mode==='plan'?'Plan mode: lesson edits and file writes are only a proposal until the teacher approves, so describe the plan in your reply.':'Agent mode: lesson edits and file writes are applied immediately, so say briefly what you changed.'}
+
+## Your memory (/memory.md)
+${(fs['/memory.md']||'').slice(-3000)}
+
+## Files
+${Object.keys(fs).join(', ')}`}
+const RD=['read_file','list_files'];
+function runRead(a){if(a.type==='list_files')return'Files: '+Object.keys(fs).join(', ');const f=np(a.path);return fs[f]==null?`${f}: file not found`:`${f}:\n${fs[f].slice(0,6000)}`}
+function fileOp(a){const f=np(a.path),c=String(a.content??'').slice(0,20000);if(f==='/SKILL.md')return null;
+ if(a.type==='write_file'){if(!(f in fs)&&Object.keys(fs).length>=50)return null;fs[f]=c}
+ else if(a.type==='append_file')fs[f]=((fs[f]||'')+'\n'+c).slice(0,20000);
+ else if(a.type==='delete_file'){if(f==='/memory.md'||!(f in fs))return null;delete fs[f]}
+ else return null;saveFs();return f}
+async function chat(){const el=$('#ci'),t=el.value.trim();if(!t)return;L.chat=L.chat||[];
+ const hist=L.chat.slice(-12).map(m=>({role:m.r==='user'?'user':'assistant',content:m.t}));
+ L.chat.push({r:'user',t});el.value='';save();msgsView();const b=$('#cb');b.disabled=true;b.textContent='Thinking…';
+ const used=[],all=[];let reply='Done.';
+ try{const sys=await sysPrompt();let h=hist,prompt=`Current lesson (JSON): ${JSON.stringify({title:L.title,items:L.items})}\n\nTeacher: ${t}`;
+  for(let n=0;n<5;n++){const j=await ai(sys,prompt,$('#gw').checked,h);reply=String(j.reply||reply);const out=[];
+   for(const a of Array.isArray(j.actions)?j.actions:[]){
+    if(RD.includes(a.type)){out.push(runRead(a));used.push(a.type==='list_files'?'Listed files':'Read '+np(a.path))}
+    else if(a.type==='remember'&&a.text){fs['/memory.md']=((fs['/memory.md']||'')+'\n- '+String(a.text).slice(0,300)).slice(-8000);saveFs();used.push('Remembered: '+a.text)}
+    else all.push(a)}
+   if(!out.length)break;h=[...h,{role:'user',content:prompt},{role:'assistant',content:JSON.stringify(j)}];prompt='Tool results:\n'+out.join('\n\n')+'\n\nNow give your final answer as JSON.'}
+  if(mode==='agent'&&all.length){const did=apply(all);L.chat.push({r:'ai',t:reply,did,used});save();edit(cur);return}
+  L.chat.push({r:'ai',t:reply,used,...(all.length?{plan:{acts:all,done:false}}:{})})}
+ catch(e){L.chat.push({r:'ai',t:'Something went wrong: '+e.message+'. Try again.'})}
+ L.chat=L.chat.slice(-60);save();msgsView();b.disabled=false;b.textContent='Send'}
+/* ---------- AI providers ---------- */
+const LIMIT=40,PROV={
+ builtin:{n:'Built-in (limited)',models:[MODEL]},
+ claude:{n:'Claude',url:'https://api.anthropic.com/v1/messages',models:['claude-sonnet-5-5','claude-haiku-5-5','claude-opus-5-5'],web:1},
+ gemini:{n:'Gemini',models:['gemini-2.5-flash','gemini-2.5-pro'],web:1},
+ openai:{n:'ChatGPT (OpenAI)',url:'https://api.openai.com/v1/chat/completions',base:'https://api.openai.com/v1',models:['gpt-5','gpt-5-mini','gpt-4.1']},
+ groq:{n:'Groq',url:'https://api.groq.com/openai/v1/chat/completions',base:'https://api.groq.com/openai/v1',models:['openai/gpt-oss-120b','openai/gpt-oss-20b','llama-3.3-70b-versatile'],web:1},
+ deepseek:{n:'DeepSeek',url:'https://api.deepseek.com/chat/completions',base:'https://api.deepseek.com',models:['deepseek-chat','deepseek-reasoner']}};
+let mlist=[];
+const saveCfg=()=>sv('lc_set_'+user,cfg),today=()=>new Date().toISOString().slice(0,10);
+const useToday=()=>{const u=ls('lc_use',{});return u.d===today()?u.n:0};
+const norm=(h,p)=>{const o=[];for(const m of [...(h||[]),{role:'user',content:p}]){const r=m.role==='user'?'user':'assistant',l=o[o.length-1];if(l&&l.role===r)l.content+='\n\n'+m.content;else if(l||r==='user')o.push({role:r,content:m.content})}return o};
+async function llm(sys,p,web,h){const P=cfg.prov||'builtin';let url,hd={'Content-Type':'application/json'},b,r,j;
+ if(P==='builtin'){const n=useToday();if(n>=LIMIT)throw Error(`Built-in AI is limited to ${LIMIT} requests a day. Add your own API key in Settings > Advanced.`);sv('lc_use',{d:today(),n:n+1});
+  b={model:MODEL,messages:[{role:'system',content:sys},...(h||[]),{role:'user',content:p}]};if(web)b.tools=[{type:'browser_search'}];
+  r=await fetch(PROXY,{method:'POST',headers:hd,body:JSON.stringify(b)});j=await r.json();return j.choices?.[0]?.message?.content||j.reply||j.text||j.content||''}
+ const k=(cfg.keys||{})[P],md=(cfg.models||{})[P]||PROV[P].models[0];if(!k)throw Error(`Add your ${PROV[P].n} API key in Settings > Advanced`);
+ if(P==='claude'){hd['x-api-key']=k;hd['anthropic-version']='2023-06-01';hd['anthropic-dangerous-direct-browser-access']='true';url=PROV.claude.url;b={model:md,max_tokens:4096,system:sys,messages:norm(h,p)};if(web)b.tools=[{type:'web_search_20250305',name:'web_search',max_uses:3}]}
+ else if(P==='gemini'){url=`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(md)}:generateContent`;hd['x-goog-api-key']=k;b={systemInstruction:{parts:[{text:sys}]},contents:norm(h,p).map(m=>({role:m.role==='user'?'user':'model',parts:[{text:m.content}]}))};if(web)b.tools=[{google_search:{}}]}
+ else{url=PROV[P].url;hd.Authorization='Bearer '+k;b={model:md,messages:[{role:'system',content:sys},...(h||[]),{role:'user',content:p}]};if(web&&P==='groq'&&/gpt-oss/.test(md))b.tools=[{type:'browser_search'}]}
+ r=await fetch(url,{method:'POST',headers:hd,body:JSON.stringify(b)});j=await r.json().catch(()=>({}));
+ if(!r.ok)throw Error(j.error?.message||(typeof j.error==='string'?j.error:'HTTP '+r.status));
+ return P==='claude'?(j.content||[]).filter(c=>c.type==='text').map(c=>c.text).join(''):P==='gemini'?(j.candidates?.[0]?.content?.parts||[]).map(c=>c.text||'').join(''):j.choices?.[0]?.message?.content||''}
+function advHTML(){const P=cfg.prov||'builtin',d=PROV[P],ml=mlist.length?mlist:d.models;
+ return`<label class="fld">Provider<select onchange="cfg.prov=this.value;mlist=[];saveCfg();advView()">${Object.entries(PROV).map(([k,v])=>`<option value="${k}" ${k===P?'selected':''}>${v.n}</option>`).join('')}</select></label>
+${P==='builtin'?`<p class="mu">Uses the shared HRS proxy with a fixed model. Limited to ${LIMIT} requests a day in this browser (used today: ${useToday()}). Each chat message can use several requests.</p>`
+:`<label class="fld">API key<input type="password" autocomplete="off" placeholder="Paste your ${d.n} API key" value="${esc((cfg.keys||{})[P]||'')}" oninput="(cfg.keys=cfg.keys||{})['${P}']=this.value.trim();saveCfg()"></label>
+<label class="fld">Model<input list="mdl" value="${esc((cfg.models||{})[P]||d.models[0])}" oninput="(cfg.models=cfg.models||{})['${P}']=this.value.trim();saveCfg()"><datalist id="mdl">${ml.map(m=>`<option value="${esc(m)}">`).join('')}</datalist></label>
+<div class="r"><button class="g" onclick="loadModels()">Load models</button><button class="g" onclick="advTest()">Test connection</button></div>
+<p class="mu">Your key is saved in this browser only and sent straight to ${d.n}. Anyone using this browser profile can read it, so avoid shared computers. Type any model ID, or use Load models to see what your key can use. ${d.web?'Web search is supported.':'Web search is not available with this provider, so the AI web search checkbox is ignored.'}</p>`}
+<p class="mu" id="advmsg"></p>`}
+const advView=()=>{$('#advb').innerHTML=advHTML()};
+async function loadModels(){const P=cfg.prov,k=(cfg.keys||{})[P],m=$('#advmsg');if(!k){m.textContent='Enter your API key first.';return}m.textContent='Loading…';
+ try{let url,hd;if(P==='claude'){url='https://api.anthropic.com/v1/models?limit=100';hd={'x-api-key':k,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'}}
+ else if(P==='gemini'){url='https://generativelanguage.googleapis.com/v1beta/models?pageSize=100';hd={'x-goog-api-key':k}}
+ else{url=PROV[P].base+'/models';hd={Authorization:'Bearer '+k}}
+ const j=await(await fetch(url,{headers:hd})).json();
+ const a=P==='gemini'?(j.models||[]).filter(x=>(x.supportedGenerationMethods||[]).includes('generateContent')).map(x=>x.name.replace('models/','')):(j.data||[]).map(x=>x.id);
+ if(!a.length)throw Error(j.error?.message||'No models returned');mlist=a.sort();advView();$('#advmsg').textContent=a.length+' models loaded. Click the model box to choose one.'}
+ catch(e){m.textContent='Could not load models: '+e.message}}
+async function advTest(){const m=$('#advmsg');m.textContent='Testing…';
+ try{const t=await llm('Reply with the single word: ok','ping',false,[]);m.textContent='Connected. The model replied: '+t.slice(0,60)}
+ catch(e){m.textContent='Failed: '+e.message+(e.message==='Failed to fetch'?' (check the key and your connection; some providers block requests from web pages)':'')}}
+/* ---------- settings ---------- */
+async function settings(){hdr();await ensureFs();if(!(sel in fs))sel='/memory.md';
+app.innerHTML=`<div class="c"><div class="r"><button class="g" onclick="dash()">← Back</button><h2 class="f">Settings</h2></div>
+<label class="t"><input type="checkbox" ${cfg.ai?'checked':''} onchange="cfg.ai=this.checked;sv('lc_set_'+user,cfg)">Enable AI features</label>
+<p class="mu">When off, every AI tool is hidden. You can still create slides and quiz questions by hand.</p></div>
+<div class="c"><b>AI files</b><p class="mu">The AI's memory and virtual files, stored in this browser. It follows /SKILL.md and keeps notes in /memory.md. You can edit any file or add your own.</p>
+<div class="r"><select id="fsel" aria-label="File" onchange="fview(this.value)">${Object.keys(fs).sort().map(f=>`<option value="${esc(f)}" ${f===sel?'selected':''}>${esc(f)}</option>`).join('')}</select><button class="g" onclick="fnew()">New file</button><button class="d" onclick="fdel()">Delete file</button><button class="g" onclick="skillReset()">Reset SKILL.md</button></div>
+<textarea id="fta" aria-label="File contents" style="min-height:280px;font-family:monospace" oninput="fs[sel]=this.value;saveFs()"></textarea></div>
+<details class="c"><summary><b>Advanced</b></summary><p class="mu">Choose which AI provider and model the lesson assistant uses.</p><div id="advb">${advHTML()}</div></details>`;fview(sel)}
+function fview(f){sel=f;$('#fta').value=fs[f]??''}
+function fnew(){const n=prompt('File path, for example /notes/week1.md');if(!n)return;const f=np(n);if(f==='/SKILL.md')return;fs[f]=fs[f]??'';saveFs();sel=f;settings()}
+function fdel(){if(sel==='/SKILL.md'||sel==='/memory.md')return alert('This file is required. Edit its contents instead.');if(confirm('Delete '+sel+'?')){delete fs[sel];saveFs();sel='/memory.md';settings()}}
+async function skillReset(){if(!confirm('Replace /SKILL.md with the default?'))return;fs['/SKILL.md']=await skill();saveFs();sel='/SKILL.md';settings()}
+function doPlan(k){const m=L.chat[k];m.did=null;m.plan.done=true;const d=apply(m.plan.acts);if(!d.length)m.t+='\n(No steps could be applied.)';save();edit(cur)}
+function dropPlan(k){L.chat[k].plan.done='no';save();msgsView()}
+function undo(){if(!L.undo)return;const u=JSON.parse(L.undo);L.title=u.title;L.items=u.items;L.undo=null;save();edit(cur)}
+function clr(){if(confirm('Clear this lesson\'s chat history?')){L.chat=[];save();edit(cur)}}
+/* ---------- editor ---------- */
+let cur=0;
+function edit(i){cur=i;L=lessons[i];hdr();
+app.innerHTML=`<div class="c"><div class="r"><button class="g" onclick="dash()">← Back</button><input class="f" value="${esc(L.title)}" oninput="L.title=this.value;save()"><button class="pri" onclick="host(cur)">Host</button></div>
+<label class="t"><input type="checkbox" ${L.lb?'checked':''} onchange="L.lb=this.checked;save()">Leaderboard mode</label>
+<label class="t"><input type="checkbox" ${L.split!==false?'checked':''} onchange="L.split=this.checked;save()">Lesson first, then quiz</label>
+${cfg.ai?`<label class="t"><input type="checkbox" ${L.quiz?'checked':''} onchange="L.quiz=this.checked;save()">Let AI write quiz questions</label>
+<label class="t"><input type="checkbox" id="gw">AI web search</label>`:''}</div>
+${cfg.ai?chatHTML()+`<div class="c"><b>Create with AI</b><input id="gt" placeholder="Topic, e.g. Photosynthesis"><div class="r"><input class="f" id="ga" placeholder="Audience, e.g. Year 8"><input id="gn" type="number" value="5" min="1" max="15" style="width:80px"></div>
+<button class="pri" id="gb" onclick="gen()">Generate with AI</button><button id="sb" class="g" onclick="suggest()" ${L.items.length?'':'disabled'}>✨ Suggest edits</button><div class="mu">Generating replaces current content.</div></div>`:'<div class="c mu">AI is turned off in Settings. Build slides and quiz questions by hand below.</div>'}
+${aiSugs.map((s,k)=>`<div class="c sg"><b>Suggestion for item ${s.index+1}</b><p>${esc(s.reason)}</p><div class="mu">${esc(s.item.type==='q'?s.item.q:s.item.title+' — '+s.item.body)}</div><button onclick="acc(${k})">Accept</button><button class="g" onclick="dis(${k})">Dismiss</button></div>`).join('')}
+${L.items.map((x,j)=>`<div class="c item ${x.type}"><div class="r"><b class="f">${j+1}. ${x.type==='q'?'Question':'Slide'}</b><button class="g" onclick="mv(${j},-1)">↑</button><button class="g" onclick="mv(${j},1)">↓</button><button class="d" onclick="rm(${j})">✕</button></div>
+${x.type==='q'?`<input value="${esc(x.q)}" placeholder="Question" oninput="L.items[${j}].q=this.value;save()">${x.opts.map((o,k)=>`<div class="r"><input type="radio" name="a${j}" ${x.ans===k?'checked':''} onchange="L.items[${j}].ans=${k};save()"><input class="f" value="${esc(o)}" oninput="L.items[${j}].opts[${k}]=this.value;save()"></div>`).join('')}`
+:`<input value="${esc(x.title)}" placeholder="Title" oninput="L.items[${j}].title=this.value;save()"><textarea oninput="L.items[${j}].body=this.value;save()">${esc(x.body)}</textarea>`}</div>`).join('')}
+<div class="c"><button onclick="add('slide')">+ Slide</button><button onclick="add('q')">+ Quiz question</button></div>`;const mb=$('#msgs');if(mb)mb.scrollTop=mb.scrollHeight}
+function add(t){L.items.push(t==='q'?{type:'q',q:'',opts:['','','',''],ans:0}:{type:'slide',title:'',body:''});save();edit(cur)}
+function rm(j){L.items.splice(j,1);save();edit(cur)}
+function mv(j,d){const k=j+d;if(k<0||k>=L.items.length)return;[L.items[j],L.items[k]]=[L.items[k],L.items[j]];save();edit(cur)}
+/* ---------- host ---------- */
+function stopHost(){try{peer&&peer.destroy()}catch{}peer=null;conns={};players={};conn=null}
+function seq(){const it=L.items;if(L.split===false)return it;const sl=it.filter(x=>x.type!=='q'),qs=it.filter(x=>x.type==='q');return sl.length&&qs.length?[...sl,{type:'slide',title:'Quiz time',body:'The lesson is finished. Get ready for the questions.'},...qs]:it}
+function host(i){stopHost();L=lessons[i];cur=i;sugs=[];
+H={code:Math.random().toString(36).slice(2,7).toUpperCase(),idx:0,reveal:false,lb:L.lb,items:seq()};
+peer=new Peer('hrslesson-'+H.code);
+peer.on('connection',c=>{conns[c.peer]=c;c.on('data',m=>{
+ if(m.t==='join'){players[c.peer]={name:String(m.name).slice(0,20),score:0,ans:null};push(c.peer);hview()}
+ else if(m.t==='ans'&&players[c.peer]&&!H.reveal&&players[c.peer].ans===null){players[c.peer].ans=m.a;push(c.peer);hview()}
+ else if(m.t==='sug'){sugs.push({n:players[c.peer]?.name||'?',x:String(m.x).slice(0,300)});hview()}});
+ c.on('close',()=>{delete conns[c.peer];delete players[c.peer];hview()})});
+peer.on('error',e=>{alert('Connection error: '+e.type)});hview()}
+const board=()=>Object.values(players).sort((a,b)=>b.score-a.score).map(p=>({n:p.name,s:p.score}));
+function pubItem(x){return x.type==='q'?{type:'q',q:x.q,opts:x.opts}:x}
+function push(id){const c=conns[id],p=players[id],x=H.items[H.idx];if(!c||!p)return;
+c.send({t:'st',title:L.title,idx:H.idx,total:H.items.length,item:x&&pubItem(x),reveal:H.reveal,ans:H.reveal?x?.ans:null,mine:p.ans,score:p.score,lb:H.lb?board().slice(0,5):null})}
+const pushAll=()=>Object.keys(conns).forEach(push);
+function go(d){H.idx=Math.max(0,Math.min(H.items.length-1,H.idx+d));H.reveal=false;Object.values(players).forEach(p=>p.ans=null);pushAll();hview()}
+function rev(){const x=H.items[H.idx];if(x?.type!=='q'||H.reveal)return;H.reveal=true;Object.values(players).forEach(p=>{if(p.ans===x.ans)p.score+=100});pushAll();hview()}
+function tglLb(v){H.lb=v;pushAll();hview()}
+function hview(){document.body.dataset.m='stage';const x=H.items[H.idx],n=Object.keys(players).length,answered=Object.values(players).filter(p=>p.ans!==null).length;
+app.innerHTML=`<div class="bar"><button class="g" onclick="stopHost();dash()">End lesson</button><div class="join">Students join with code<b class="code">${H.code}</b></div><span class="mu">${n} connected</span><label class="t"><input type="checkbox" ${H.lb?'checked':''} onchange="tglLb(this.checked)">Leaderboard</label></div>
+<div class="prog"><i style="width:${(H.idx+1)/Math.max(1,H.items.length)*100}%"></i></div>
+<div class="grid"><section><div class="board big">${x?(x.type==='q'?`<h2>${esc(x.q)}</h2>${x.opts.map((o,k)=>`<div class="opt ${H.reveal&&k===x.ans?'ok':''}"><b class="ab">${'ABCD'[k]}</b>${esc(o)}</div>`).join('')}<p class="mu">${answered} of ${n} answered</p>`:`<h2>${esc(x.title)}</h2><p>${esc(x.body)}</p>`):'<p>This lesson has no slides yet. End the lesson and add some in the editor.</p>'}</div>
+<div class="r"><button class="g" onclick="go(-1)">Previous</button><span class="mu">${H.idx+1} of ${H.items.length}</span><button class="pri" onclick="go(1)">Next</button>${x?.type==='q'?`<button onclick="rev()" ${H.reveal?'disabled':''}>Reveal answer</button>`:''}</div></section>
+<aside><div class="lb"><b>Leaderboard</b>${board().map((p,i)=>`<div class="rk"><span>${i+1}. ${esc(p.n)}</span><b>${p.s}</b></div>`).join('')||'<p class="mu">Waiting for students to join.</p>'}</div>${sugs.length?`<div class="lb"><b>Student suggestions</b>${sugs.map(s=>`<div class="sg"><b>${esc(s.n)}:</b> ${esc(s.x)}</div>`).join('')}</div>`:''}</aside></div>`}
+/* ---------- student ---------- */
+function join(){const code=$('#jc').value.trim().toUpperCase(),name=$('#jn').value.trim(),e=$('#je');
+if(!code||!name)return e.textContent='Enter the code and your name.';e.textContent='Connecting…';
+peer=new Peer();peer.on('open',()=>{conn=peer.connect('hrslesson-'+code,{reliable:true});
+ conn.on('open',()=>conn.send({t:'join',name}));conn.on('data',m=>{if(m.t==='st')sview(m)});
+ conn.on('close',()=>{app.innerHTML='<div class="c"><h2>Lesson ended</h2><button onclick="location.reload()">Back</button></div>'});
+ setTimeout(()=>{if(!conn.open)e.textContent='Could not connect — check the code and that your teacher is hosting.'},8000)});
+peer.on('error',()=>{e.textContent='Could not connect — check the code.'})}
+function sview(m){document.body.dataset.m='stage';const x=m.item;let h=`<div class="bar"><b class="f">${esc(m.title)}</b><span class="pts">${m.score} pts</span></div><div class="prog"><i style="width:${(m.idx+1)/Math.max(1,m.total)*100}%"></i></div><div class="board big">`;
+if(!x)h+='<p>Waiting for your teacher to start.</p>';
+else if(x.type==='q')h+=`<h2>${esc(x.q)}</h2>`+x.opts.map((o,k)=>`<button class="opt ${m.reveal?(k===m.ans?'ok':k===m.mine?'no':''):(k===m.mine?'sel':'')}" ${m.mine!==null||m.reveal?'disabled':''} onclick="conn.send({t:'ans',a:${k}})"><b class="ab">${'ABCD'[k]}</b>${esc(o)}</button>`).join('')+(m.reveal?`<p class="res">${m.mine===m.ans?'Correct, +100 points':'Not quite. The right answer is highlighted.'}</p>`:m.mine!==null?'<p class="mu">Answer locked in…</p>':'');
+else h+=`<h2>${esc(x.title)}</h2><p>${esc(x.body)}</p>`;
+h+='</div>';
+if(m.lb)h+=`<div class="lb"><b>Leaderboard</b>${m.lb.map((p,i)=>`<div class="rk"><span>${i+1}. ${esc(p.n)}</span><b>${p.s}</b></div>`).join('')}</div>`;
+h+=`<div class="lb"><input id="sx" placeholder="Suggest an edit or improvement to your teacher"><button class="g" onclick="const v=$('#sx').value.trim();if(v){conn.send({t:'sug',x:v});$('#sx').value='';this.textContent='Sent ✓'}">Send suggestion</button></div>`;
+const f=document.activeElement?.id==='sx'?$('#sx').value:'';app.innerHTML=h;if(f){$('#sx').value=f;$('#sx').focus()}}
+home();
+</script></body></html>
